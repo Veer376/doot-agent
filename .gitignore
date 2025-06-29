@@ -5,3 +5,5 @@ requirements.txt
 readme.md
 .env
 todo.md
+__pycache__
+considerations.md
