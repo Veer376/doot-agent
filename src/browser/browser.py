@@ -3,12 +3,9 @@ from playwright.async_api import async_playwright, Page, Browser, Playwright
 from google.genai import types
 import io
 from typing import Optional, Any
-from pydantic import BaseModel
-
-class BrowserActionResult(BaseModel):
-    success: bool
-    message: str
-    data: Optional[dict[str, Any]] = None
+from pydantic import BaseModel, Field
+from datetime import datetime
+from .schema import BrowserActionResult
 
 class Browser:
     def __init__(self, viewport_width=1280, viewport_height=800):
@@ -40,42 +37,42 @@ class Browser:
                 await self.playwright.stop()
             return False
                 
-    async def navigate(self, url: str):
+    async def navigate(self, url: str) -> BrowserActionResult:
         try:
             # Store page count before navigation (browser-use approach)
-            # initial_pages = len(self.browser.pages)
+            initial_pages = len(self.browser.contexts[0].pages)
             
             await self.page.goto(url, wait_until='load', timeout=60000) # Wait for load, reasonable timeout
             
             # # # Check if navigation created new tabs (redirects, popups, etc.)
-            # if len(self.browser.pages) > initial_pages:
-            #     await self._switch_to_newest_tab()
+            if len(self.browser.contexts[0].pages) > initial_pages:
+                await self._switch_to_newest_tab()
                 
-            return {
-                "success": True,
-                "message": f"Successfully navigated to {url}",
-            }
+            return BrowserActionResult.success(
+                action_type="navigate",
+                message=f"Successfully navigated to {url}",
+            )
         except Exception as e:
-            return {
-                "success": False,
-                "message": f"Error navigating to {url}: {str(e)}",
-            }
+            return BrowserActionResult.failure(
+                action_type="navigate",
+                message=f"Error navigating to {url}: {str(e)}",
+            )
             
-    async def close(self):
+    async def close(self) -> BrowserActionResult:
         try:
             if hasattr(self, 'browser') and self.browser:
                 await self.browser.close()
             if hasattr(self, 'playwright') and self.playwright:
                 await self.playwright.stop()
-            return {
-                "success": True,
-                "message": "Browser successfully closed",
-            }
+            return BrowserActionResult.success(
+                action_type="close",
+                message="Browser successfully closed",
+            )
         except Exception as e:
-            return {
-                "success": False,
-                "message": f"Error closing browser: {str(e)}",
-            }
+            return BrowserActionResult.failure(
+                action_type="close",
+                message=f"Error closing browser: {str(e)}",
+            )
         
     async def screenshot_bytes(self, iteration=None) -> types.Part:
         try:
@@ -84,7 +81,7 @@ class Browser:
         except Exception as e:
             return str(e)
 
-    async def screenshot_part(self):
+    async def screenshot_part(self) -> BrowserActionResult:
         try:
             # Take the screenshot
             screenshot_bytes = await self.page.screenshot()
@@ -111,48 +108,53 @@ class Browser:
                     data=screenshot_bytes,
                 )
             )
-            return {
-                "success": True,
-                "message": "Screenshot part captured successfully",
-                "data": part_data
-            }
-        except Exception as e:            
-            return {
-                "success": False,
-                "message": f"Error taking screenshot part: {str(e)}",
-            }
+            return BrowserActionResult.success(
+                action_type="screenshot",
+                message="Screenshot part captured successfully",
+                data={"part": part_data}
+            )
+        except Exception as e:
+            return BrowserActionResult.failure(
+                action_type="screenshot",
+                message=f"Error taking screenshot part: {str(e)}",
+            )
             
-    async def click(self, x: float, y: float, label: str = None, button: str = "left", timeout: int = 5000, delay_after: int = 500):
-        label = label or '[no label provided]'
+    async def click(self, x: float = 0, y: float = 0, label: str = None, button: str = "left", timeout: int = 5000, delay_after: int = 500) -> BrowserActionResult:
         
         try:
             # Store page count before click (browser-use approach)
-            initial_pages = len(self.browser.pages)
+            initial_pages = len(self.browser.contexts[0].pages)
             
-            await self.page.mouse.click(x, y, button=button)
-            await self.page.wait_for_timeout(delay_after)
-            
-            # Check if click opened new tabs
+            # await self.page.mouse.click(x, y, button=button)
+            elements = await self.page.locator("text=BookMyShow").all()
+
+            for e in elements:
+                tag = await e.evaluate("el => el.tagName")
+                href = await e.get_attribute("href")
+                if tag == "A" and href:
+                    await e.click()
+                    break
+
             new_tab_opened = False
-            if len(self.browser.pages) > initial_pages:
+            if len(self.browser.contexts[0].pages) > initial_pages:
                 new_tab_opened = await self._switch_to_newest_tab()
             
             success_message = f"Successfully clicked at coordinates ({x},{y}), label: '{label}'"
             if new_tab_opened:
                 success_message += " - New tab opened, switched to it"
                 
-            return {
-                "success": True,
-                "message": success_message,
-            }
+            return BrowserActionResult.success(
+                action_type="click",
+                message=success_message,
+            )
         except Exception as e:
             print(f"[BROWSER] ERROR clicking: {e}")
-            return {
-                "success": False,
-                "message": f"Error clicking at coordinates ({x},{y}): {str(e)}",
-            }
+            return BrowserActionResult.failure(
+                action_type="click",
+                message=f"Error clicking at coordinates ({x},{y}): {str(e)}",
+            )
             
-    async def scroll(self, direction: str = "down", amount: int = 500, x: float = None, y: float = None, delay_after: int = 500):
+    async def scroll(self, direction: str = "down", amount: int = 500, x: float = None, y: float = None, delay_after: int = 500) -> BrowserActionResult:
         
         try:
             await self.page.mouse.move(x, y)
@@ -161,30 +163,32 @@ class Browser:
             
             await self.page.mouse.wheel(0, scroll_delta_y)
             await self.page.wait_for_timeout(delay_after)
-            return {
-                "success": True,
-                "message": f"Successfully scrolled {direction} by {amount} pixels",
-            }
+            return BrowserActionResult.success(
+                action_type="scroll",
+                message=f"Successfully scrolled {direction} by {amount} pixels",
+            )
         except Exception as e:
-            return {
-                "success": False,                
-                "message": f"Error scrolling {direction}: {str(e)}",            }
+            return BrowserActionResult.failure(
+                action_type="scroll",
+                message=f"Error scrolling {direction}: {str(e)}",
+            )
             
-    async def type_text(self, text: str, label: str = None, delay: int = 50, timeout: int = 10000, delay_after: int = 200):
+    async def type_text(self, text: str, label: str = None, delay: int = 50, timeout: int = 10000, delay_after: int = 200) -> BrowserActionResult:
         label = label or '[no field label provided]'
         try:
             await self.page.keyboard.type(text, delay=delay)
             await self.page.wait_for_timeout(delay_after)
-            return {
-                "success": True,
-                "message": f"Typed text: '{text}' into field: '{label}'",
-            }
+            return BrowserActionResult.success(
+                action_type="type",
+                message=f"Typed text: '{text}' into field: '{label}'",
+            )
         except Exception as e:
-            return {
-                "success": False,
-                "message": f"Error typing text '{text}': {str(e)}",                  }
+            return BrowserActionResult.failure(
+                action_type="type",
+                message=f"Error typing text '{text}': {str(e)}",
+            )
             
-    async def press_keys(self, keys, delay_after: int = 200):
+    async def press_keys(self, keys, delay_after: int = 200) -> BrowserActionResult:
         try:
             pressed_keys = []
             for key in keys:
@@ -209,29 +213,29 @@ class Browser:
                             await self.page.wait_for_timeout(2000)
                 else:
                     await self.page.wait_for_timeout(delay_after)
-            return {
-                "success": True,
-                "message": f"Successfully pressed keys: {', '.join(pressed_keys)}",
-            }
+            return BrowserActionResult.success(
+                action_type="press_keys",
+                message=f"Successfully pressed keys: {', '.join(pressed_keys)}",
+            )
         except Exception as e:
-            return {
-                "success": False,
-                "message": f"Error pressing keys: {str(e)}",                
-            }
+            return BrowserActionResult.failure(
+                action_type="press_keys",
+                message=f"Error pressing keys: {str(e)}",
+            )
             
-    async def go_back(self, delay_after: int = 1000):
+    async def go_back(self, delay_after: int = 1000) -> BrowserActionResult:
         try:
             await self.page.go_back()
             await self.page.wait_for_timeout(delay_after)
-            return {
-                "success": True,
-                "message": "🔙  Navigated back",
-            }
+            return BrowserActionResult.success(
+                action_type="go_back",
+                message="🔙  Navigated back",
+            )
         except Exception as e:
-            return {
-                "success": False,
-                "message": f"Error navigating back: {str(e)}",            
-            }
+            return BrowserActionResult.failure(
+                action_type="go_back",
+                message=f"Error navigating back: {str(e)}",
+            )
     
     async def show_pointer(self, x: float, y: float):
         try:
@@ -298,18 +302,18 @@ class Browser:
             
             if result:
                 print(f"[BROWSER] Pointer created successfully at ({x}, {y})")
-                return {
-                    "success": True,
-                    "message": f"Successfully showed pointer at coordinates ({x},{y})",
-                }
+                return BrowserActionResult.success(
+                    action_type="show_pointer",
+                    message=f"Successfully showed pointer at coordinates ({x},{y})",
+                )
             else:
                 raise Exception("Failed to create pointer element")
         except Exception as e:
             print(f"[BROWSER] Error showing pointer: {e}")
-            return {
-                "success": False,
-                "message": f"Error showing pointer: {str(e)}",
-            }
+            return BrowserActionResult.failure(
+                action_type="show_pointer",
+                message=f"Error showing pointer: {str(e)}",
+            )
         
     async def hide_pointer(self):
         """Remove the visual pointer."""
@@ -319,23 +323,23 @@ class Browser:
                 if (pointer) pointer.remove();
             }"""
             await self.page.evaluate(js_code)
-            return {
-                "success": True,
-                "message": "Successfully removed pointer",
-            }
+            return BrowserActionResult.success(
+                action_type="hide_pointer",
+                message="Successfully removed pointer",
+            )
         except Exception as e:
             print(f"[BROWSER] Error removing pointer: {e}")
-            return {
-                "success": False,
-                "message": f"Error removing pointer: {str(e)}",
-            }
+            return BrowserActionResult.failure(
+                action_type="hide_pointer",
+                message=f"Error removing pointer: {str(e)}",
+            )
     
     async def _switch_to_newest_tab(self):
-        """Switch to the most recently created tab (browser-use approach)"""
+
         if not self.auto_switch_to_new_tabs:
             return False
-            
-        current_pages = self.browser.pages
+
+        current_pages = self.browser.contexts[0].pages
         # Trust the caller - they already detected new tabs
         newest_page = current_pages[-1]  # Get the most recent page
         
@@ -378,3 +382,114 @@ class Browser:
                     "is_current": page == self.page
                 })
         return tabs_info
+    
+    async def show_pointer_pro(self, x: float, y: float):
+        """Add an advanced visual pointer with click and splash animation."""
+        try:
+            await self.page.wait_for_load_state("domcontentloaded")
+
+            js_code = """(coords) => {
+                // Remove existing custom pointers and splash elements
+                document.querySelectorAll('.ai-pointer-pro-container, .ai-splash-line').forEach(el => el.remove());
+
+                const container = document.createElement('div');
+                container.className = 'ai-pointer-pro-container';
+                container.style.cssText = `
+                    position: fixed;
+                    left: ${coords.x}px;
+                    top: ${coords.y}px;
+                    transform: translate(-50%, -50%);
+                    pointer-events: none;
+                    z-index: 2147483647;
+                `;
+                document.body.appendChild(container);
+
+                // Create and animate splash lines
+                const numberOfLines = 12; // Increased number of lines for a fuller splash
+                const lineLength = 30; // Increased line length
+                const animationDuration = 1000; // milliseconds
+                const initialOffset = 5; // distance from center before animation
+                const finalOffset = lineLength * 2; // distance from center after animation
+
+                for (let i = 0; i < numberOfLines; i++) {
+                    const line = document.createElement('div');
+                    line.className = 'ai-splash-line';
+                    const angle = (i / numberOfLines) * 360;
+                    const radians = angle * Math.PI / 180;
+
+                    line.style.cssText = `
+                        position: absolute;
+                        width: 2px;
+                        height: ${lineLength}px;
+                        background: rgba(255, 255, 255, 0.8); /* White lines with some transparency */
+                        opacity: 1;
+                        transform-origin: 50% 50%;
+                        /* Position at center, rotate, and translate outwards */
+                        transform: translate(-1px, -${lineLength / 2}px) rotate(${angle}deg) translate(0px, ${initialOffset}px);
+                    `;
+
+                    container.appendChild(line);
+
+                    // Animate lines outwards and fade out
+                    line.animate([
+                        { transform: `translate(-1px, -${lineLength / 2}px) rotate(${angle}deg) translate(0px, ${initialOffset}px)`, opacity: 1 },
+                        { transform: `translate(-1px, -${lineLength / 2}px) rotate(${angle}deg) translate(0px, ${finalOffset}px)`, opacity: 0 }
+                    ], {
+                        duration: animationDuration,
+                        easing: 'ease-out',
+                        fill: 'forwards'
+                    });
+                }
+
+                // Optional: Add a central pulsing dot before the splash (simulating the click point)
+                const clickDot = document.createElement('div');
+                clickDot.className = 'ai-click-dot';
+                clickDot.style.cssText = `
+                    position: absolute;
+                    width: 10px;
+                    height: 10px;
+                    background: red;
+                    border-radius: 50%;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%, -50%);
+                    opacity: 1;
+                `;
+                container.appendChild(clickDot);
+
+                 clickDot.animate([
+                    { transform: 'translate(-50%, -50%) scale(1)', opacity: 1 },
+                    { transform: 'translate(-50%, -50%) scale(1.5)', opacity: 0.5 },
+                    { transform: 'translate(-50%, -50%) scale(1)', opacity: 1 }
+                ], {
+                    duration: 500, // Quick pulse
+                    iterations: 1
+                });
+
+
+                // Remove container after animation
+                setTimeout(() => {
+                    container.remove();
+                }, animationDuration + 100); // Add a small delay after line animation
+
+                return true; // Indicate success
+            }"""
+
+            print(f"[BROWSER] Attempting to show advanced pointer at coordinates: ({x}, {y})")
+            # Pass coordinates as a dictionary to match the JavaScript parameters
+            result = await self.page.evaluate(js_code, {'x': x, 'y': y})
+
+            if result:
+                print(f"[BROWSER] Advanced pointer created successfully at ({x}, {y})")
+                return BrowserActionResult.success(
+                    action_type="show_pointer_pro",
+                    message=f"Successfully showed advanced pointer at coordinates ({x},{y})",
+                )
+            else:
+                raise Exception("Failed to create advanced pointer elements")
+        except Exception as e:
+            print(f"[BROWSER] Error showing advanced pointer: {e}")
+            return BrowserActionResult.failure(
+                action_type="show_pointer_pro",
+                message=f"Error showing advanced pointer: {str(e)}",
+            )
