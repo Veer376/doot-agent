@@ -10,9 +10,9 @@ class BrowserActionResult(BaseModel):
     timestamp: datetime = Field(default_factory=datetime.utcnow)
 
     @classmethod
-    def success(cls, action_type: str, message: str, data: dict = None) -> "BrowserActionResult":
+    def create_success(cls, action_type: str, message: str, data: dict = None) -> "BrowserActionResult":
         return cls(success=True, action_type=action_type, message=message, data=data)
 
     @classmethod
-    def failure(cls, action_type: str, message: str, error: str = None) -> "BrowserActionResult":
+    def create_failure(cls, action_type: str, message: str, error: str = None) -> "BrowserActionResult":
         return cls(success=False, action_type=action_type, message=message, error=error)

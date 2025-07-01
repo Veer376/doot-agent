@@ -48,12 +48,12 @@ class Browser:
             if len(self.browser.contexts[0].pages) > initial_pages:
                 await self._switch_to_newest_tab()
                 
-            return BrowserActionResult.success(
+            return BrowserActionResult.create_success(
                 action_type="navigate",
-                message=f"Successfully navigated to {url}",
+                message=f"Navigated to {url}",
             )
         except Exception as e:
-            return BrowserActionResult.failure(
+            return BrowserActionResult.create_failure(
                 action_type="navigate",
                 message=f"Error navigating to {url}: {str(e)}",
             )
@@ -64,12 +64,12 @@ class Browser:
                 await self.browser.close()
             if hasattr(self, 'playwright') and self.playwright:
                 await self.playwright.stop()
-            return BrowserActionResult.success(
+            return BrowserActionResult.create_success(
                 action_type="close",
                 message="Browser successfully closed",
             )
         except Exception as e:
-            return BrowserActionResult.failure(
+            return BrowserActionResult.create_failure(
                 action_type="close",
                 message=f"Error closing browser: {str(e)}",
             )
@@ -108,13 +108,13 @@ class Browser:
                     data=screenshot_bytes,
                 )
             )
-            return BrowserActionResult.success(
+            return BrowserActionResult.create_success(
                 action_type="screenshot",
                 message="Screenshot part captured successfully",
                 data={"part": part_data}
             )
         except Exception as e:
-            return BrowserActionResult.failure(
+            return BrowserActionResult.create_failure(
                 action_type="screenshot",
                 message=f"Error taking screenshot part: {str(e)}",
             )
@@ -143,13 +143,12 @@ class Browser:
             if new_tab_opened:
                 success_message += " - New tab opened, switched to it"
                 
-            return BrowserActionResult.success(
+            return BrowserActionResult.create_success(
                 action_type="click",
                 message=success_message,
             )
         except Exception as e:
-            print(f"[BROWSER] ERROR clicking: {e}")
-            return BrowserActionResult.failure(
+            return BrowserActionResult.create_failure(
                 action_type="click",
                 message=f"Error clicking at coordinates ({x},{y}): {str(e)}",
             )
@@ -163,27 +162,27 @@ class Browser:
             
             await self.page.mouse.wheel(0, scroll_delta_y)
             await self.page.wait_for_timeout(delay_after)
-            return BrowserActionResult.success(
+            return BrowserActionResult.create_success(
                 action_type="scroll",
                 message=f"Successfully scrolled {direction} by {amount} pixels",
             )
         except Exception as e:
-            return BrowserActionResult.failure(
+            return BrowserActionResult.create_failure(
                 action_type="scroll",
                 message=f"Error scrolling {direction}: {str(e)}",
             )
             
-    async def type_text(self, text: str, label: str = None, delay: int = 50, timeout: int = 10000, delay_after: int = 200) -> BrowserActionResult:
-        label = label or '[no field label provided]'
+    async def type(self, text: str, label: str = None, delay: int = 50, timeout: int = 10000, delay_after: int = 200) -> BrowserActionResult:
+        label = label or '[NO LABEL]'
         try:
             await self.page.keyboard.type(text, delay=delay)
             await self.page.wait_for_timeout(delay_after)
-            return BrowserActionResult.success(
+            return BrowserActionResult.create_success(
                 action_type="type",
                 message=f"Typed text: '{text}' into field: '{label}'",
             )
         except Exception as e:
-            return BrowserActionResult.failure(
+            return BrowserActionResult.create_failure(
                 action_type="type",
                 message=f"Error typing text '{text}': {str(e)}",
             )
@@ -213,12 +212,12 @@ class Browser:
                             await self.page.wait_for_timeout(2000)
                 else:
                     await self.page.wait_for_timeout(delay_after)
-            return BrowserActionResult.success(
+            return BrowserActionResult.create_success(
                 action_type="press_keys",
                 message=f"Successfully pressed keys: {', '.join(pressed_keys)}",
             )
         except Exception as e:
-            return BrowserActionResult.failure(
+            return BrowserActionResult.create_failure(
                 action_type="press_keys",
                 message=f"Error pressing keys: {str(e)}",
             )
@@ -227,12 +226,12 @@ class Browser:
         try:
             await self.page.go_back()
             await self.page.wait_for_timeout(delay_after)
-            return BrowserActionResult.success(
+            return BrowserActionResult.create_success(
                 action_type="go_back",
                 message="🔙  Navigated back",
             )
         except Exception as e:
-            return BrowserActionResult.failure(
+            return BrowserActionResult.create_failure(
                 action_type="go_back",
                 message=f"Error navigating back: {str(e)}",
             )
@@ -302,7 +301,7 @@ class Browser:
             
             if result:
                 print(f"[BROWSER] Pointer created successfully at ({x}, {y})")
-                return BrowserActionResult.success(
+                return BrowserActionResult.create_success(
                     action_type="show_pointer",
                     message=f"Successfully showed pointer at coordinates ({x},{y})",
                 )
@@ -310,7 +309,7 @@ class Browser:
                 raise Exception("Failed to create pointer element")
         except Exception as e:
             print(f"[BROWSER] Error showing pointer: {e}")
-            return BrowserActionResult.failure(
+            return BrowserActionResult.create_failure(
                 action_type="show_pointer",
                 message=f"Error showing pointer: {str(e)}",
             )
@@ -323,13 +322,13 @@ class Browser:
                 if (pointer) pointer.remove();
             }"""
             await self.page.evaluate(js_code)
-            return BrowserActionResult.success(
+            return BrowserActionResult.create_success(
                 action_type="hide_pointer",
                 message="Successfully removed pointer",
             )
         except Exception as e:
             print(f"[BROWSER] Error removing pointer: {e}")
-            return BrowserActionResult.failure(
+            return BrowserActionResult.create_failure(
                 action_type="hide_pointer",
                 message=f"Error removing pointer: {str(e)}",
             )
@@ -481,7 +480,7 @@ class Browser:
 
             if result:
                 print(f"[BROWSER] Advanced pointer created successfully at ({x}, {y})")
-                return BrowserActionResult.success(
+                return BrowserActionResult.create_success(
                     action_type="show_pointer_pro",
                     message=f"Successfully showed advanced pointer at coordinates ({x},{y})",
                 )
@@ -489,7 +488,7 @@ class Browser:
                 raise Exception("Failed to create advanced pointer elements")
         except Exception as e:
             print(f"[BROWSER] Error showing advanced pointer: {e}")
-            return BrowserActionResult.failure(
+            return BrowserActionResult.create_failure(
                 action_type="show_pointer_pro",
                 message=f"Error showing advanced pointer: {str(e)}",
             )
