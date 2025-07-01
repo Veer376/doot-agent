@@ -25,16 +25,24 @@ async def main(task):
         screenshot_base64 = base64.b64encode(screenshot).decode('utf-8')
         
         initial_state = {
+            "user_id": "user_123",
+            "session_id": str(uuid.uuid4()),
             "messages": [{"role": "user", "content": task}],
-            "goal": task,
+            "execution_state": {
+                "task": task,
+                "history": [],
+                "errors": [],
+                "consecutive_failures": 0,
+                "status": "pending",
+            },
             "browser_state": {
-                "screenshot": screenshot_base64,
-                "url": "https://www.bing.com",  # Initial URL
+                "page_title": "Bing",
+                "url": "https://www.bing.com",
+                "dom_structure": "",
                 "viewport_width": browser.viewport_width,
                 "viewport_height": browser.viewport_height,
-                "page_title": "Bing"  # Initial page title assumption
-            },
-            "execution_history": []
+                "screenshots": [screenshot_base64]
+            }
         }
         
         config = {
@@ -46,21 +54,13 @@ async def main(task):
         
         agent.update_state(config=config, values=initial_state)
         
-        for _ in range(20):
+        from rich.markdown import Markdown
+        from rich.console import Console
+        
+        async for chunk in agent.astream({"messages": []}, config=config, stream_mode="values"):
             
-            async for chunk in agent.astream({"messages": []}, config=config, stream_mode="values"):
-                
-                if '__interrupt__' in chunk:
-                    user_input = input(f"{chunk['__interrupt__']}")
-                    agent.update_state(config=config, values={"messages": [{"role": "user", "content": user_input}]})
-                    
-                else: 
-                    print(chunk["messages"][-1].pretty_print())
-            
-                    screenshot = await browser.screenshot_bytes()
-                    screenshot_base64 = base64.b64encode(screenshot).decode('utf-8')
-                    # Update just the screenshot in browser_state
-                    agent.update_state(config=config, values={"browser_state": {"screenshot": screenshot_base64}})
+                print(chunk["messages"][-1].pretty_print())
+        
 
     except Exception as e:
         print(f"An error occurred: {e}")

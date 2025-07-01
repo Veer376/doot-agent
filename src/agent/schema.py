@@ -1,22 +1,41 @@
 from pydantic import BaseModel, Field
 from typing import Optional, List, TypedDict, Annotated
 from langgraph.graph.message import add_messages
+from enum import Enum
 
+class ExecutionStatus(str, Enum):
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    INTERRUPTED = "interrupted"
+    CANCELLED = "cancelled"
 
-class BrowserState(BaseModel):
-    """Current state of the browser"""
-    screenshot: str = Field(..., description="Base64 encoded screenshot of the current browser state")
-    url: str = ""
-    viewport_width: int = 1280
-    viewport_height: int = 800
-    page_title: Optional[str] = None
+class ExecutionState:
+    task: str
+    history: list[str]
+    errors: list[str]
+    consecutive_failures: int = 2
+    status: ExecutionStatus
     
+class PageState:
+    page_title: str
+    url: str
+    dom_structure: str
+    viewport_width: int
+    viewport_height: int
+    screenshots: list[str]
+
 class AgentState(TypedDict):
-    """State maintained by the supervisor agent"""
+    # identity state
+    user_id: str
+    session_id: str
     messages: Annotated[list[dict], add_messages]
-    goal: str
-    browser_state: BrowserState
-    execution_history: List[str]  # History of actions performed
+    # execution state
+    execution_state: ExecutionState
+    # page state 
+    browser_state: PageState # 'll only track the current page state
+
 
 class UrlSchema(BaseModel):
     url: str = Field(..., description="The website URL to navigate to")
@@ -39,6 +58,3 @@ class InteractionSchema(BaseModel):
 class WaitSchema(BaseModel):
     seconds: int = Field(..., description="Number of seconds to wait before proceeding with the next action.")
  
-class ClickStateSchema(BaseModel):
-    state: AgentState
-    label: str = Field(..., description="Label of the element to click on")
