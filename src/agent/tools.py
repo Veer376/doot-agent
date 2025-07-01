@@ -13,99 +13,125 @@ import os
 
 @tool(
     "navigate_to_url", 
-    args_schema=UrlSchema, 
     description="Use this tool to navigate to a specific website URL."
 )
-async def navigate_to_url(url: str) -> str:
+async def navigate_to_url(url: str, state: Annotated[dict, InjectedState]) -> str:
     browser = await get_browser()
     result = await browser.navigate(url)
+    
+    if not result.success:
+        state['execution_state']['consecutive_failures'] += 1
+        state['execution_state']['errors'].append(f"Failed to navigate to {url}. Error: {result.message}")
+    else :
+        state['execution_state']['history'].append(f"Navigated to {url}")
+        state['browser_state']['url'] = url
+        # state['browser_state']['dom_structure'] = await browser.get_dom_structure()
     return result.message
 
 
-class BoundingBox(BaseModel):
-    ymin: float
-    xmin: float
-    ymax: float
-    xmax: float
-    
-
 @tool(
-    "click_element",
-    description="Use this tool to click on an element in the current page."
+    "click",
+    description="Use this tool to click on an element on the browser page by providing its label. "
 )
-async def click_element(label: str, state: Annotated[dict, InjectedState]) -> str:
-    # Access the injected state
-    print(f"Current state: {state}")
-
-    browser = await get_browser()
+async def click(label: str, description: str, state: Annotated[dict, InjectedState]) -> str:
     
-    # To test this thing.
-    element = browser.page.locator(f"text={label}").first
-    if not element:
-        return f"Element with label '{label}' not found on the page."
-    else : print(f"Element with label '{label}' found on the page.")
+    screenshot = state["browser_state"]["screenshots"][-1]  
     
-    screenshot = await browser.screenshot_bytes()
-    screenshot = base64.b64encode(screenshot).decode('utf-8')
-        
     image_part = genai.types.Part(
         inline_data=genai.types.Blob(
             mime_type="image/png",
             data=screenshot
         )
     )
-    
+    # First handle the label using the locator() function, then only use the genai API.
     response = genai.Client(api_key=os.getenv("GENAI_API_KEY")).models.generate_content(
         model="gemini-2.5-flash",
-        contents=[image_part, f"See the image, find the {label} clickable element and return its bounding box coordinates in the format: [ymin, xmin, ymax, xmax]. The coordinates should be normalized to 0-1000 scale."],
+        contents=[image_part, f"Bounding box for label: '{label}' with description '{description}'. It should be in the format: [ymin, xmin, ymax, xmax] normalized to 0-1000."],
         config=types.GenerateContentConfig(
             response_mime_type="application/json",
-            response_schema=BoundingBox,
             system_instruction="""
-            You are expert in computer vision and spatial understanding.
-            You are provided with a label/element to click on a webpage like button, link, input field etc.
-            You task is to identify and return a bounding box coordinates of the element in the screenshot.
+            You are a helpful assistant, expert in computer vision and spatial understanding.
+            You will be provided with a screenshot of a web page and a label describing a clickable element on that page like button, dropdown, clickable text, etc.
+            Your task is to identify and return a most appropriate bounding box coordinates of the clickable element on the browser matching the label in the screenshot.
+            
+            **Follow these guidelines:**
+            1. Elements can be a button, link, input field, or any other clickable element.
+            2. Generate correct bounding box coordinates for the element.
+            3. If multiple elements match the description, return the most appropriate one.
+            
+            The bounding box coordinates should be in the format: [ymin, xmin, ymax, xmax].
             The coordinates should be normalized to 0-1000 scale.
             """
         )
     )
     
     import json
-    content = response.text
-    bbox_data = json.loads(content)
-    ymin, xmin, ymax, xmax = bbox_data["ymin"], bbox_data["xmin"], bbox_data["ymax"], bbox_data["xmax"]
-    x =  (xmin + xmax) / 2
-    y = (ymin + ymax) / 2
+    bounding_box = json.loads(response.text)
     
+    print(f"INSIDE THE CLICK_ELEMENT Bounding box for {label}: {bounding_box}")
+    
+    y1 = int(bounding_box[0])
+    x1 = int(bounding_box[1])
+    y2 = int(bounding_box[2])
+    x2 = int(bounding_box[3])
+    
+    if y1 == 0 and x1 == 0 and y2 == 0 and x2 == 0:
+        return f"Failed because the LLM didn't find the coordinates of the label, Try to give the label with detail description"
+    
+    x =  (x1 + x2) / 2
+    y = (y1 + y2) / 2
+
     x,y = correct_coordinates(x,y)
     
-    await browser.show_pointer(x=x, y=y)
+    browser = await get_browser()
+    
+    await browser.show_pointer_pro(x=x, y=y)
     await browser.page.wait_for_timeout(10000)
     await browser.hide_pointer()
 
-    result = await browser.click(x=x, y=y)
+    result = await browser.click(x=x, y=y, label=label)
+    
+    if not result.success:
+        state['execution_state']['consecutive_failures'] += 1
+        state['execution_state']['errors'].append(f"Failed to click on {label}. Error: {result.message}")
+    else:
+        state['execution_state']['history'].append(f"Clicked on {label}")
+        
     return result.message
      
     
 @tool(
-    "type_text",
-    args_schema=TypeTextSchema,
+    "type",
     description="use this tool to type text in the input field."
 )
-async def type_text(text: str, label: str) -> str:
+async def type(text: str, label: str, state: Annotated[dict, InjectedState]) -> str:
+    
     browser = await get_browser()
-    result = await browser.type_text(text=text, label=label)
+    result = await browser.type(text=text, label=label)
+    
+    if not result.success:
+        state['execution_state']['consecutive_failures'] += 1
+        state['execution_state']['errors'].append(f"Failed to type text in {label}. Error: {result.message}")
+    else:
+        state['execution_state']['history'].append(f"Typed '{text}' in {label}")
+
     return result.message
 
 
 @tool(
     "press_keys", 
-    args_schema=PressKeysSchema, 
+    # args_schema=PressKeysSchema, 
     description="Use this tool to press keys on the keyboard e.g( 'Enter', 'Backspace' etc."
 )
-async def press_keys(keys: list[str]) -> str:
+async def press_keys(keys: list[str], state: Annotated[dict, InjectedState]) -> str:
     browser = await get_browser()
     result = await browser.press_keys(keys=keys)
+    
+    if not result.success:
+        state['execution_state']['consecutive_failures'] += 1
+        state['execution_state']['errors'].append(f"Failed to press keys {keys}. Error: {result.message}")
+    else: 
+        state['execution_state']['history'].append(f"Pressed keys {keys}")
     return result.message
 
 
@@ -113,9 +139,16 @@ async def press_keys(keys: list[str]) -> str:
     "go_back", 
     description="Use this tool to go back to the previous page in the browser history."
 )
-async def go_back() -> str:
+async def go_back(state: Annotated[dict, InjectedState]) -> str:
     browser = await get_browser()
     result = await browser.go_back()
+
+    if not result.success:
+        state['execution_state']['consecutive_failures'] += 1
+        state['execution_state']['errors'].append(f"Failed to go back. Error: {result.message}")
+    else:
+        state['execution_state']['history'].append("Went back to the previous page.")
+
     return result.message
 
 
@@ -137,35 +170,22 @@ async def human_interaction(query: str):
 async def wait(seconds: int):
     await asyncio.sleep(seconds)
 
-
 @tool(
-    "click", 
-    description="Use this tool to click on an element in the current page."
+    "exit",
+    description="use this tool to exit the agent."
 )
-async def click(label: str) -> str:
-    
-    
-    browser = await get_browser()
-    
-    # To test this thing.
-    element = browser.page.locator(f"text={label}").first
-    if not element:
-        return f"Element with label '{label}' not found on the page."
-    else : print(f"Element with label '{label}' found on the page.")
-    
-    result = await browser.click(label=label)
-    return result.message
-     
-    
-
+async def exit(reason: str, state: Annotated[dict, InjectedState]) -> str:
+    state['execution_state']['status'] = "failed"
+    return f"Agent exited: {reason}"
 
 
 tools = [
     navigate_to_url,
-    click_element,
-    type_text,
+    click,
+    type,
     press_keys,
     go_back,
-    # human_interaction,
-    wait
+    human_interaction,
+    wait,
+    exit
 ]
