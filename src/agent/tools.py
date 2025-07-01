@@ -4,7 +4,7 @@ from typing import List, Dict, Any
 from google.genai import types
 from langgraph.prebuilt import InjectedState
 from .utils import correct_coordinates
-from ..browser.browser_manager import get_browser
+from ..browser import get_browser
 from .schema import *
 from langgraph.types import interrupt
 import asyncio
@@ -19,7 +19,7 @@ import os
 async def navigate_to_url(url: str) -> str:
     browser = await get_browser()
     result = await browser.navigate(url)
-    return result["message"]
+    return result.message
 
 
 class BoundingBox(BaseModel):
@@ -30,12 +30,21 @@ class BoundingBox(BaseModel):
     
 
 @tool(
-    "click_element", 
+    "click_element",
     description="Use this tool to click on an element in the current page."
 )
-async def click_element(label: str) -> str:
-    
+async def click_element(label: str, state: Annotated[dict, InjectedState]) -> str:
+    # Access the injected state
+    print(f"Current state: {state}")
+
     browser = await get_browser()
+    
+    # To test this thing.
+    element = browser.page.locator(f"text={label}").first
+    if not element:
+        return f"Element with label '{label}' not found on the page."
+    else : print(f"Element with label '{label}' found on the page.")
+    
     screenshot = await browser.screenshot_bytes()
     screenshot = base64.b64encode(screenshot).decode('utf-8')
         
@@ -75,7 +84,7 @@ async def click_element(label: str) -> str:
     await browser.hide_pointer()
 
     result = await browser.click(x=x, y=y)
-    return result["message"]
+    return result.message
      
     
 @tool(
@@ -86,7 +95,7 @@ async def click_element(label: str) -> str:
 async def type_text(text: str, label: str) -> str:
     browser = await get_browser()
     result = await browser.type_text(text=text, label=label)
-    return result["message"]
+    return result.message
 
 
 @tool(
@@ -97,7 +106,7 @@ async def type_text(text: str, label: str) -> str:
 async def press_keys(keys: list[str]) -> str:
     browser = await get_browser()
     result = await browser.press_keys(keys=keys)
-    return result["message"]
+    return result.message
 
 
 @tool(
@@ -107,7 +116,7 @@ async def press_keys(keys: list[str]) -> str:
 async def go_back() -> str:
     browser = await get_browser()
     result = await browser.go_back()
-    return result["message"]
+    return result.message
 
 
 @tool(
@@ -129,11 +138,30 @@ async def wait(seconds: int):
     await asyncio.sleep(seconds)
 
 
+@tool(
+    "click", 
+    description="Use this tool to click on an element in the current page."
+)
+async def click(label: str) -> str:
+    
+    
+    browser = await get_browser()
+    
+    # To test this thing.
+    element = browser.page.locator(f"text={label}").first
+    if not element:
+        return f"Element with label '{label}' not found on the page."
+    else : print(f"Element with label '{label}' found on the page.")
+    
+    result = await browser.click(label=label)
+    return result.message
+     
+    
 
 
 
 tools = [
-    # navigate_to_url,
+    navigate_to_url,
     click_element,
     type_text,
     press_keys,

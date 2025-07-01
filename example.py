@@ -10,7 +10,7 @@ import sys
 import os
 import base64
 from typing import Dict, Any
-from src.browser.browser_manager import initialize_browser, get_browser, close_browser
+from src.browser import initialize_browser
 from langgraph.errors import NodeInterrupt
 from src.agent.agent import agent
 
@@ -59,6 +59,7 @@ async def main(task):
             
                     screenshot = await browser.screenshot_bytes()
                     screenshot_base64 = base64.b64encode(screenshot).decode('utf-8')
+                    # Update just the screenshot in browser_state
                     agent.update_state(config=config, values={"browser_state": {"screenshot": screenshot_base64}})
 
     except Exception as e:
