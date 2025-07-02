@@ -8,11 +8,12 @@ from .browser import Browser
 # Global browser instance
 _browser_instance: Optional[Browser] = None
 
-async def initialize_browser(viewport_width=1280, viewport_height=800) -> Browser:
+async def initialize_browser(use_debug_chrome: bool = False
+) -> Browser:
     
     global _browser_instance
     if _browser_instance is None:
-        _browser_instance = Browser(viewport_width, viewport_height)
+        _browser_instance = Browser(use_debug_chrome=use_debug_chrome)
         await _browser_instance.initialize()
     return _browser_instance
 

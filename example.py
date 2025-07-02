@@ -13,10 +13,11 @@ from typing import Dict, Any
 from src.browser import initialize_browser
 from langgraph.errors import NodeInterrupt
 from src.agent.agent import agent
+from langgraph.types import Command
 
-async def main(task):
+async def main(task, use_debug_chrome):
     
-    browser = await initialize_browser(viewport_width=1024, viewport_height=768)
+    browser = await initialize_browser(use_debug_chrome=use_debug_chrome)
     
     try: 
         await browser.navigate("https://www.bing.com")
@@ -46,21 +47,44 @@ async def main(task):
         }
         
         config = {
-            "recursion_limit": 10,
+            "recursion_limit": 50,
             "configurable" : {
                 "thread_id": str(uuid.uuid4()),
             }
         }
         
-        agent.update_state(config=config, values=initial_state)
-        
-        from rich.markdown import Markdown
-        from rich.console import Console
-        
-        async for chunk in agent.astream({"messages": []}, config=config, stream_mode="values"):
+        async for chunk in agent.astream(initial_state, config=config, stream_mode="values"):
+               
+            interrupted_checkpoint = None
+            if "__interrupt__" in chunk:
+                print("INTERRUPTED!")
+                print(f"Agent: {chunk['__interrupt__']}")
+                interrupted_checkpoint = chunk
+                break
             
-                print(chunk["messages"][-1].pretty_print())
-        
+            else : print(chunk["messages"][-1].pretty_print())
+            
+        if interrupted_checkpoint:
+
+            interrupted2 = None
+            async for chunk in agent.astream(Command(resume=input("USER: ")), config=config, stream_mode="values"):
+                    
+                if "__interrupt__" in chunk:
+                    print("INTERRUPTED AGAIN!")
+                    print(f"Agent: {chunk['__interrupt__']}")
+                    break
+                else : print(chunk["messages"][-1].pretty_print())
+                
+            interrupted2 = chunk
+
+            if interrupted2:
+                user_input = input("USER: ")
+                async for chunk in agent.astream(Command(resume=user_input), config=config, stream_mode="values"):
+                    if "__interrupt__" in chunk:
+                        print("INTERRUPTED AGAIN!")
+                        print(f"Agent: {chunk['__interrupt__']}")
+                        break
+                    else : print(chunk["messages"][-1].pretty_print())
 
     except Exception as e:
         print(f"An error occurred: {e}")
@@ -68,4 +92,7 @@ async def main(task):
         await browser.close()
 
 
-asyncio.run(main(task = "book a movie ticket for Animal for tomorrow at 7pm greater noida grand venice mall"))
+
+USE_DEBUG_CHROME = True
+TASK = "go to the url https://web.whatsapp.com and send message to 'abhishek' with your introduction as a browser automation. You have to ask abhishek if he is free to go on 'nadhi' today, ask reason if says no"
+asyncio.run(main(task=TASK, use_debug_chrome=USE_DEBUG_CHROME))
