@@ -266,18 +266,18 @@
 
       // Generate a color based on the index
       const colors = [
-        "#FF0000",
-        "#00FF00",
-        "#0000FF",
-        "#FFA500",
-        "#800080",
-        "#008080",
-        "#FF69B4",
-        "#4B0082",
-        "#FF4500",
-        "#2E8B57",
-        "#DC143C",
-        "#4682B4",
+        "#4A90E2", // Royal Blue
+        "#50E3C2", // Teal
+        "#F5A623", // Orange
+        "#BD10E0", // Purple
+        "#7ED321", // Lime Green
+        "#E0105A", // Raspberry
+        "#9013FE", // Violet
+        "#417505", // Dark Green
+        "#D0021B", // Strong Red
+        "#FE4A49", // Coral
+        "#2E8B57", // Sea Green
+        "#4682B4", // Steel Blue
       ];
       const colorIndex = index % colors.length;
       const baseColor = colors[colorIndex];
@@ -300,7 +300,9 @@
 
         const overlay = document.createElement("div");
         overlay.style.position = "fixed";
-        overlay.style.border = `2px solid ${baseColor}`;
+        overlay.style.borderRadius = "8px"; // Rounded corners
+        overlay.style.boxShadow = `0 0 0 2px ${baseColor}, 0 0 10px ${baseColor}80`; // Glow effect
+        overlay.style.border = `1px solid ${baseColor}`;
         overlay.style.backgroundColor = backgroundColor;
         overlay.style.pointerEvents = "none";
         overlay.style.boxSizing = "border-box";
@@ -324,9 +326,12 @@
       label.style.position = "fixed";
       label.style.background = baseColor;
       label.style.color = "white";
-      label.style.padding = "1px 4px";
-      label.style.borderRadius = "4px";
-      label.style.fontSize = `${Math.min(12, Math.max(8, firstRect.height / 2))}px`;
+      label.style.padding = "2px 6px";
+      label.style.borderRadius = "6px";
+      label.style.fontSize = `${Math.min(13, Math.max(9, firstRect.height / 2))}px`; // Slightly larger font
+      label.style.fontWeight = "normal";
+      label.style.textShadow = "0 1px 1px #00000080"; // Add a subtle shadow to the text
+      label.style.boxShadow = "0 1px 3px #00000040"; // Add a subtle shadow to the label itself
       label.textContent = index;
 
       labelWidth = label.offsetWidth > 0 ? label.offsetWidth : labelWidth; // Update actual width if possible
