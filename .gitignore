@@ -8,3 +8,12 @@ todo.md
 __pycache__
 improve.md
 screenshots
+chrome-user-data
+training_data.txt
+orbit-agent.txt
+prompt
+logging_config.py
+export_code.py
+infrastructure
+core
+agents
