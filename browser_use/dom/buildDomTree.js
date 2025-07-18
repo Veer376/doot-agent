@@ -267,17 +267,18 @@
       // Generate a color based on the index
       const colors = [
         "#4A90E2", // Royal Blue
-        "#50E3C2", // Teal
-        "#F5A623", // Orange
         "#BD10E0", // Purple
         "#7ED321", // Lime Green
-        "#E0105A", // Raspberry
         "#9013FE", // Violet
         "#417505", // Dark Green
         "#D0021B", // Strong Red
         "#FE4A49", // Coral
         "#2E8B57", // Sea Green
-        "#4682B4", // Steel Blue
+        "#451e3e",  // Dark Purple
+        "#f6cd61", // Mustard
+        "#f37735", // Orange
+        "#3b7dd8", // Twitter Blue
+        ""
       ];
       const colorIndex = index % colors.length;
       const baseColor = colors[colorIndex];
