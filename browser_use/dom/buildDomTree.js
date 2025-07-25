@@ -1145,6 +1145,9 @@
           }
           return true; // Successfully highlighted
         }
+        // Increment even if !doHighlightElements
+        highlightIndex++;
+        return true;
       } else {
         // console.log(`Skipping highlight for ${nodeData.tagName} (outside viewport)`);
       }
