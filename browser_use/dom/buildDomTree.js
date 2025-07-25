@@ -1143,7 +1143,6 @@
           } else {
             highlightElement(node, nodeData.highlightIndex, parentIframe);
           }
-          return true; // Successfully highlighted
         }
         // Increment even if !doHighlightElements
         highlightIndex++;
