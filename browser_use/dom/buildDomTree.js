@@ -301,8 +301,8 @@
 
         const overlay = document.createElement("div");
         overlay.style.position = "fixed";
-        overlay.style.borderRadius = "8px"; // Rounded corners
-        overlay.style.boxShadow = `0 0 0 2px ${baseColor}, 0 0 10px ${baseColor}80`; // Glow effect
+        overlay.style.borderRadius = "7px"; // Rounded corners
+        overlay.style.boxShadow = `0 0 0 0.4px ${baseColor}, 0 0 1px ${baseColor}50`; // Glow effect
         overlay.style.border = `1px solid ${baseColor}`;
         overlay.style.backgroundColor = backgroundColor;
         overlay.style.pointerEvents = "none";
