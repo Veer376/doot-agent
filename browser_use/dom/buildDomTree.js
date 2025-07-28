@@ -658,6 +658,14 @@
     const tagName = element.tagName.toLowerCase();
     const style = getCachedComputedStyle(element);
 
+    // Exclude empty, non-semantic tags
+    // if ((tagName === 'p' || tagName === 'span') || tagName ==='div' &&
+    //   element.textContent.trim() === '' &&
+    //   !element.hasAttribute('onclick') &&
+    //   !element.hasAttribute('role')) {
+    //   return false;
+    // }
+
     // Define interactive cursors
     const interactiveCursors = new Set([
       'pointer',    // Link/clickable elements
