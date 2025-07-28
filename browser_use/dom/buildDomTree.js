@@ -1064,6 +1064,11 @@
       return true;
     }
 
+    if ((tagName === 'p' || tagName === 'span' || tagName === 'div') 
+      && !element.hasAttribute('onclick') && !element.hasAttribute('role')) {
+      return false;
+    }
+
     // Check tag name
     if (DISTINCT_INTERACTIVE_TAGS.has(tagName)) {
       return true;
