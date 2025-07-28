@@ -238,8 +238,12 @@
     // Store overlays and the single label for updating
     const overlays = [];
     let label = null;
-    let labelWidth = 20;
-    let labelHeight = 16;
+    // Increase minimum label size by 20%, but cap maximum size
+    let labelWidth = 21.6; // Increased minimum by 20%
+    let labelHeight = 17.3; // Increased minimum by 20%
+    // Define max label dimensions (15% smaller than what they would have been)
+    const maxLabelWidth = 29.8; // Decreased by 15%
+    const maxLabelHeight = 23.8; // Decreased by 15%
     let cleanupFn = null;
 
     try {
@@ -264,24 +268,50 @@
 
       if (!rects || rects.length === 0) return index; // Exit if no rects
 
-      // Generate a color based on the index
+      // Colors for random assignment (excluding blue)
       const colors = [
-        "#4A90E2", // Royal Blue
-        "#BD10E0", // Purple
         "#7ED321", // Lime Green
-        "#9013FE", // Violet
-        "#417505", // Dark Green
-        "#D0021B", // Strong Red
-        "#FE4A49", // Coral
-        "#2E8B57", // Sea Green
-        "#451e3e",  // Dark Purple
-        "#f6cd61", // Mustard
+        "#9d2effff", // Violet
+        "#ff001eff", // Strong Red
+        "#009f45ff", // Sea Green
+        "#ff00d0ff",
+        "#ffbb10ff", // Mustard
         "#f37735", // Orange
-        "#3b7dd8", // Twitter Blue
-        ""
       ];
-      const colorIndex = index % colors.length;
-      const baseColor = colors[colorIndex];
+      
+      // Function to determine element type and assign colors
+      function getElementTypeColor(element) {
+        const tagName = element.tagName.toLowerCase();
+        const type = element.getAttribute('type')?.toLowerCase();
+        const role = element.getAttribute('role')?.toLowerCase();
+
+        // Text fields - blue
+        if (
+          tagName === 'input' && (
+            type === 'text' || 
+            type === 'email' || 
+            type === 'password' || 
+            type === 'search' || 
+            type === 'tel' || 
+            type === 'url' || 
+            type === 'number' ||
+            !type // Default input type is text
+          ) ||
+          tagName === 'textarea' ||
+          role === 'textbox' ||
+          role === 'searchbox' ||
+          element.isContentEditable
+        ) {
+          return "#1a7deeff"; // Darker Pink (Material Design pink 600)
+        }
+        
+        // For all other elements, use random colors
+        const colorIndex = index % colors.length;
+        return colors[colorIndex];
+      }
+
+      // Get color based on element type
+      const baseColor = getElementTypeColor(element);
       const backgroundColor = baseColor + "1A"; // 10% opacity version of the color
 
       // Get iframe offset if necessary
@@ -327,31 +357,55 @@
       label.style.position = "fixed";
       label.style.background = baseColor;
       label.style.color = "white";
-      label.style.padding = "2px 6px";
-      label.style.borderRadius = "6px";
-      label.style.fontSize = `${Math.min(13, Math.max(9, firstRect.height / 2))}px`; // Slightly larger font
+      label.style.padding = "2.16px 6.48px"; // Increased by 20% from previous reduced values
+      label.style.borderRadius = "6.48px"; // Increased by 20% from previous reduced value
+      
+      // Calculate font size based on element area (width × height)
+      const elementArea = firstRect.width * firstRect.height;
+      const areaBasedSize = Math.sqrt(elementArea) * 0.15; // Square root of area with scaling factor
+      
+      // Set minimum font size (increased by 20%)
+      const minFontSize = 11.4; // Increased by 20% from 9.5
+      // Set maximum font size (decreased by 15% from the previous value)
+      const maxFontSize = 14.3; // Decreased by 15% from 16.8
+      
+      // Use the larger of the dynamic size or the minimum size
+      label.style.fontSize = `${Math.min(maxFontSize, Math.max(minFontSize, areaBasedSize))}px`;
       label.style.fontWeight = "normal";
       label.style.textShadow = "0 1px 1px #00000080"; // Add a subtle shadow to the text
       label.style.boxShadow = "0 1px 3px #00000040"; // Add a subtle shadow to the label itself
       label.textContent = index;
 
-      labelWidth = label.offsetWidth > 0 ? label.offsetWidth : labelWidth; // Update actual width if possible
-      labelHeight = label.offsetHeight > 0 ? label.offsetHeight : labelHeight; // Update actual height if possible
+      // Update dimensions if possible but constrain to max values
+      labelWidth = label.offsetWidth > 0 ? Math.min(label.offsetWidth, maxLabelWidth) : labelWidth;
+      labelHeight = label.offsetHeight > 0 ? Math.min(label.offsetHeight, maxLabelHeight) : labelHeight;
 
       const firstRectTop = firstRect.top + iframeOffset.y;
       const firstRectLeft = firstRect.left + iframeOffset.x;
+      const firstRectWidth = firstRect.width;
+      const firstRectHeight = firstRect.height;
 
-      let labelTop = firstRectTop + 2;
-      let labelLeft = firstRectLeft + firstRect.width - labelWidth - 2;
-
-      // Adjust label position if first rect is too small
-      if (firstRect.width < labelWidth + 4 || firstRect.height < labelHeight + 4) {
-        labelTop = firstRectTop - labelHeight - 2;
-        labelLeft = firstRectLeft + firstRect.width - labelWidth; // Align with right edge
-        if (labelLeft < iframeOffset.x) labelLeft = firstRectLeft; // Prevent going off-left
+      // Calculate horizontal center of bounding box
+      const boxCenterX = firstRectLeft + (firstRectWidth / 2);
+      let labelLeft = boxCenterX - (labelWidth / 2);
+      
+      // Calculate position at 1/3 height from the top of the box
+      const oneThirdHeight = firstRectTop + (firstRectHeight / 6);
+      
+      // Calculate required space needed above for label
+      const spaceNeededAbove = labelHeight - (firstRectHeight / 6);
+      
+      // Check if there's enough space above
+      let labelTop;
+      if (firstRectTop >= spaceNeededAbove) {
+        // Place label with its bottom at 1/3 height position
+        labelTop = oneThirdHeight - labelHeight;
+      } else {
+        // Fall back to inside placement (centered vertically)
+        labelTop = firstRectTop + (firstRectHeight / 2) - (labelHeight / 2);
       }
 
-      // Ensure label stays within viewport bounds slightly better
+      // Ensure label stays within viewport bounds
       labelTop = Math.max(0, Math.min(labelTop, window.innerHeight - labelHeight));
       labelLeft = Math.max(0, Math.min(labelLeft, window.innerWidth - labelWidth));
 
@@ -402,14 +456,27 @@
           const firstNewRect = newRects[0];
           const firstNewRectTop = firstNewRect.top + newIframeOffset.y;
           const firstNewRectLeft = firstNewRect.left + newIframeOffset.x;
+          const firstNewRectWidth = firstNewRect.width;
+          const firstNewRectHeight = firstNewRect.height;
 
-          let newLabelTop = firstNewRectTop + 2;
-          let newLabelLeft = firstNewRectLeft + firstNewRect.width - labelWidth - 2;
-
-          if (firstNewRect.width < labelWidth + 4 || firstNewRect.height < labelHeight + 4) {
-            newLabelTop = firstNewRectTop - labelHeight - 2;
-            newLabelLeft = firstNewRectLeft + firstNewRect.width - labelWidth;
-            if (newLabelLeft < newIframeOffset.x) newLabelLeft = firstNewRectLeft;
+          // Calculate horizontal center of bounding box
+          const boxCenterX = firstNewRectLeft + (firstNewRectWidth / 2);
+          let newLabelLeft = boxCenterX - (labelWidth / 2);
+          
+          // Calculate position at 1/3 height from the top of the box
+          const oneThirdHeight = firstNewRectTop + (firstNewRectHeight / 6);
+          
+          // Calculate required space needed above for label
+          const spaceNeededAbove = labelHeight - (firstNewRectHeight / 6);
+          
+          // Check if there's enough space above
+          let newLabelTop;
+          if (firstNewRectTop >= spaceNeededAbove) {
+            // Place label with its bottom at 1/3 height position
+            newLabelTop = oneThirdHeight - labelHeight;
+          } else {
+            // Fall back to inside placement (centered vertically)
+            newLabelTop = firstNewRectTop + (firstNewRectHeight / 2) - (labelHeight / 2);
           }
 
           // Ensure label stays within viewport bounds
@@ -659,12 +726,12 @@
     const style = getCachedComputedStyle(element);
 
     // Exclude empty, non-semantic tags
-    // if ((tagName === 'p' || tagName === 'span') || tagName ==='div' &&
-    //   element.textContent.trim() === '' &&
-    //   !element.hasAttribute('onclick') &&
-    //   !element.hasAttribute('role')) {
-    //   return false;
-    // }
+    if ((tagName === 'p' || tagName === 'span' || tagName ==='div') &&
+      // element.textContent.trim() === '' &&
+      !element.hasAttribute('onclick') &&
+      !element.hasAttribute('role')) {
+      return false;
+    }
 
     // Define interactive cursors
     const interactiveCursors = new Set([

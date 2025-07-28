@@ -6,7 +6,7 @@ readme.md
 .env
 todo.md
 __pycache__
-improve.md
+improvements.md
 screenshots
 chrome-user-data
 training_data.txt
@@ -17,3 +17,7 @@ export_code.py
 infrastructure
 core
 agents
+.gitignore
+example.py
+benchmark
+wss-test

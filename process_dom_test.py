@@ -2,14 +2,17 @@ import asyncio
 import json
 import os
 import time
-
+import sys
 import anyio
 
-from browser_use.browser.browser import Browser, BrowserConfig
+# Add the parent directory of `browser_use` to the Python path
+# sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+
+from browser_use.browser import Browser, BrowserConfig
 
 
 async def test_process_dom():
-	browser = Browser(config=BrowserConfig(headless=False))
+	browser = Browser(config=BrowserConfig(headless=False, browser_binary_path="C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"))
 
 	async with await browser.new_context() as context:
 		page = await context.get_current_page()
@@ -24,7 +27,12 @@ async def test_process_dom():
 			js_code = await f.read()
 
 		start = time.time()
-		dom_tree = await page.evaluate(js_code)
+		dom_tree = await page.evaluate(js_code, arg = {
+    "doHighlightElements": True,
+    "focusHighlightIndex": -1,
+    "viewportExpansion": 0,
+    "debugMode": False,
+  })
 		end = time.time()
 
 		# print(dom_tree)
@@ -41,3 +49,7 @@ async def test_process_dom():
 		# )
 
 		input('Press Enter to continue...')
+
+
+
+asyncio.run(test_process_dom())
