@@ -1146,7 +1146,13 @@
       // When viewportExpansion is -1, all interactive elements should get a highlight index
       // regardless of viewport status
       if (nodeData.isInViewport || viewportExpansion === -1) {
-        nodeData.highlightIndex = highlightIndex++;
+        nodeData.highlightIndex = highlightIndex;
+        
+        // Calculate and store the bounding box
+        const boundingBox = calculateBoundingBox(node, nodeData.highlightIndex);
+        if (boundingBox) {
+          nodeData.bbox = boundingBox;
+        }
 
         if (doHighlightElements) {
           if (focusHighlightIndex >= 0) {
@@ -1166,6 +1172,24 @@
     }
 
     return false; // Did not highlight
+  }
+
+  // Function to calculate page-relative bounding box
+  function calculateBoundingBox(element, highlightIdx = null) {
+    const rect = getCachedBoundingRect(element);
+    if (!rect) return null;
+    
+    // Calculate absolute position by adding scroll position
+    const scrollX = window.pageXOffset || document.documentElement.scrollLeft;
+    const scrollY = window.pageYOffset || document.documentElement.scrollTop;
+    
+    return {
+      x: Math.round(rect.left + scrollX),  // Absolute X on the page
+      y: Math.round(rect.top + scrollY),   // Absolute Y on the page
+      width: Math.round(rect.width),
+      height: Math.round(rect.height),
+      highlight_index: highlightIdx
+    };
   }
 
   /**
