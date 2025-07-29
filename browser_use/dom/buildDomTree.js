@@ -238,12 +238,6 @@
     // Store overlays and the single label for updating
     const overlays = [];
     let label = null;
-    // Increase minimum label size by 20%, but cap maximum size
-    let labelWidth = 21.6; // Increased minimum by 20%
-    let labelHeight = 17.3; // Increased minimum by 20%
-    // Define max label dimensions (15% smaller than what they would have been)
-    const maxLabelWidth = 29.8; // Decreased by 15%
-    const maxLabelHeight = 23.8; // Decreased by 15%
     let cleanupFn = null;
 
     try {
@@ -268,51 +262,29 @@
 
       if (!rects || rects.length === 0) return index; // Exit if no rects
 
-      // Colors for random assignment (excluding blue)
+      // Colors for random assignment (normalized without alpha)
       const colors = [
-        "#7ED321", // Lime Green
-        "#9d2effff", // Violet
-        "#ff001eff", // Strong Red
-        "#009f45ff", // Sea Green
-        "#ff00d0ff",
-        "#ffbb10ff", // Mustard
-        "#f37735", // Orange
+        "#5cb300ff", // Lime Green
+        "#8800ffff", // Violet  
+        "#e7001bff", // Strong Red
+        "#4800ffff", // Sea Green
+        "#eb00c0ff", // Magenta
+        "#ffbb10", // Mustard
+        "#ff6a1aff", // Orange
       ];
       
       // Function to determine element type and assign colors
       function getElementTypeColor(element) {
-        const tagName = element.tagName.toLowerCase();
-        const type = element.getAttribute('type')?.toLowerCase();
-        const role = element.getAttribute('role')?.toLowerCase();
-
-        // Text fields - blue
-        if (
-          tagName === 'input' && (
-            type === 'text' || 
-            type === 'email' || 
-            type === 'password' || 
-            type === 'search' || 
-            type === 'tel' || 
-            type === 'url' || 
-            type === 'number' ||
-            !type // Default input type is text
-          ) ||
-          tagName === 'textarea' ||
-          role === 'textbox' ||
-          role === 'searchbox' ||
-          element.isContentEditable
-        ) {
-          return "#1a7deeff"; // Darker Pink (Material Design pink 600)
-        }
-        
-        // For all other elements, use random colors
+        // All elements use the same random color cycling logic
         const colorIndex = index % colors.length;
+        if (debugMode) console.log('Element:', element.tagName.toLowerCase(), 'color index:', colorIndex, 'color:', colors[colorIndex]);
         return colors[colorIndex];
       }
 
-      // Get color based on element type
+      // Get color based on element type - but apply same visual treatment to all
       const baseColor = getElementTypeColor(element);
-      const backgroundColor = baseColor + "1A"; // 10% opacity version of the color
+      // Force all backgrounds to have the same strong opacity for consistency
+      const backgroundColor = baseColor + "66"; // 40% opacity for maximum visibility and consistency
 
       // Get iframe offset if necessary
       let iframeOffset = { x: 0, y: 0 };
@@ -331,12 +303,12 @@
 
         const overlay = document.createElement("div");
         overlay.style.position = "fixed";
-        overlay.style.borderRadius = "7px"; // Rounded corners
-        overlay.style.boxShadow = `0 0 0 0.4px ${baseColor}, 0 0 1px ${baseColor}50`; // Glow effect
-        overlay.style.border = `1px solid ${baseColor}`;
-        overlay.style.backgroundColor = backgroundColor;
+        
+        overlay.style.border = "2px solid black"; // Black solid box, 2px thick
+        overlay.style.backgroundColor = "transparent"; // Transparent fill
         overlay.style.pointerEvents = "none";
         overlay.style.boxSizing = "border-box";
+        overlay.style.borderRadius = "5px";
 
         const top = rect.top + iframeOffset.y;
         const left = rect.left + iframeOffset.x;
@@ -355,60 +327,48 @@
       label = document.createElement("div");
       label.className = "playwright-highlight-label";
       label.style.position = "fixed";
-      label.style.background = baseColor;
+      label.style.background = "black"; 
       label.style.color = "white";
-      label.style.padding = "2.16px 6.48px"; // Increased by 20% from previous reduced values
-      label.style.borderRadius = "6.48px"; // Increased by 20% from previous reduced value
-      
-      // Calculate font size based on element area (width × height)
-      const elementArea = firstRect.width * firstRect.height;
-      const areaBasedSize = Math.sqrt(elementArea) * 0.15; // Square root of area with scaling factor
-      
-      // Set minimum font size (increased by 20%)
-      const minFontSize = 11.4; // Increased by 20% from 9.5
-      // Set maximum font size (decreased by 15% from the previous value)
-      const maxFontSize = 14.3; // Decreased by 15% from 16.8
-      
-      // Use the larger of the dynamic size or the minimum size
-      label.style.fontSize = `${Math.min(maxFontSize, Math.max(minFontSize, areaBasedSize))}px`;
+      label.style.fontFamily = "monospace"; // White mono-font
+      label.style.fontSize = "12px"; // Fixed font size
       label.style.fontWeight = "normal";
-      label.style.textShadow = "0 1px 1px #00000080"; // Add a subtle shadow to the text
-      label.style.boxShadow = "0 1px 3px #00000040"; // Add a subtle shadow to the label itself
+      label.style.padding = "2px 2px";
+      label.style.pointerEvents = "none";
+      label.style.boxSizing = "border-box";
+      label.style.borderBottomRightRadius = "5px";
       label.textContent = index;
 
-      // Update dimensions if possible but constrain to max values
-      labelWidth = label.offsetWidth > 0 ? Math.min(label.offsetWidth, maxLabelWidth) : labelWidth;
-      labelHeight = label.offsetHeight > 0 ? Math.min(label.offsetHeight, maxLabelHeight) : labelHeight;
+      // Update dimensions based on actual label size
+      labelWidth = label.offsetWidth > 0 ? label.offsetWidth : 24; // Default width
+      labelHeight = label.offsetHeight > 0 ? label.offsetHeight : 16; // Default height
 
       const firstRectTop = firstRect.top + iframeOffset.y;
       const firstRectLeft = firstRect.left + iframeOffset.x;
-      const firstRectWidth = firstRect.width;
-      const firstRectHeight = firstRect.height;
 
-      // Calculate horizontal center of bounding box
-      const boxCenterX = firstRectLeft + (firstRectWidth / 2);
-      let labelLeft = boxCenterX - (labelWidth / 2);
+      // Check if bounding box is too small for label placement
+      const isBoundingBoxTooSmall = firstRect.height <= 2 * labelHeight || firstRect.width <= 2 * labelWidth;
       
-      // Calculate position at 1/3 height from the top of the box
-      const oneThirdHeight = firstRectTop + (firstRectHeight / 6);
+      let labelTop, labelLeft;
       
-      // Calculate required space needed above for label
-      const spaceNeededAbove = labelHeight - (firstRectHeight / 6);
-      
-      // Check if there's enough space above
-      let labelTop;
-      if (firstRectTop >= spaceNeededAbove) {
-        // Place label with its bottom at 1/3 height position
-        labelTop = oneThirdHeight - labelHeight;
+      if (isBoundingBoxTooSmall) {
+        // First fallback: Try to place label to the left of bounding box
+        const spaceOnLeft = firstRectLeft;
+        const requiredSpaceForLeft = labelWidth + 1; // 1px margin
+        
+        if (spaceOnLeft >= requiredSpaceForLeft) {
+          // Place label to the left, aligned with top of bounding box
+          labelTop = firstRectTop;
+          labelLeft = firstRectLeft - labelWidth - 1;
+        } else {
+          // Final fallback: Place label above bounding box, aligned with left
+          labelTop = firstRectTop - labelHeight - 1;
+          labelLeft = firstRectLeft;
+        }
       } else {
-        // Fall back to inside placement (centered vertically)
-        labelTop = firstRectTop + (firstRectHeight / 2) - (labelHeight / 2);
+        // Default positioning: top-left corner of the bounding box
+        labelTop = firstRectTop;
+        labelLeft = firstRectLeft;
       }
-
-      // Ensure label stays within viewport bounds
-      labelTop = Math.max(0, Math.min(labelTop, window.innerHeight - labelHeight));
-      labelLeft = Math.max(0, Math.min(labelLeft, window.innerWidth - labelWidth));
-
 
       label.style.top = `${labelTop}px`;
       label.style.left = `${labelLeft}px`;
@@ -456,32 +416,10 @@
           const firstNewRect = newRects[0];
           const firstNewRectTop = firstNewRect.top + newIframeOffset.y;
           const firstNewRectLeft = firstNewRect.left + newIframeOffset.x;
-          const firstNewRectWidth = firstNewRect.width;
-          const firstNewRectHeight = firstNewRect.height;
 
-          // Calculate horizontal center of bounding box
-          const boxCenterX = firstNewRectLeft + (firstNewRectWidth / 2);
-          let newLabelLeft = boxCenterX - (labelWidth / 2);
-          
-          // Calculate position at 1/3 height from the top of the box
-          const oneThirdHeight = firstNewRectTop + (firstNewRectHeight / 6);
-          
-          // Calculate required space needed above for label
-          const spaceNeededAbove = labelHeight - (firstNewRectHeight / 6);
-          
-          // Check if there's enough space above
-          let newLabelTop;
-          if (firstNewRectTop >= spaceNeededAbove) {
-            // Place label with its bottom at 1/3 height position
-            newLabelTop = oneThirdHeight - labelHeight;
-          } else {
-            // Fall back to inside placement (centered vertically)
-            newLabelTop = firstNewRectTop + (firstNewRectHeight / 2) - (labelHeight / 2);
-          }
-
-          // Ensure label stays within viewport bounds
-          newLabelTop = Math.max(0, Math.min(newLabelTop, window.innerHeight - labelHeight));
-          newLabelLeft = Math.max(0, Math.min(newLabelLeft, window.innerWidth - labelWidth));
+          // Position label at top-left corner of the bounding box
+          const newLabelTop = firstNewRectTop;
+          const newLabelLeft = firstNewRectLeft;
 
           label.style.top = `${newLabelTop}px`;
           label.style.left = `${newLabelLeft}px`;
