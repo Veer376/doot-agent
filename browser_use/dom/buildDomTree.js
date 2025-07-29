@@ -338,41 +338,43 @@
       label.style.borderBottomRightRadius = "5px";
       label.textContent = index;
 
+      // Create a temporary div for measuring the label dimensions
+      const measureDiv = document.createElement('div');
+      measureDiv.style.position = 'absolute';
+      measureDiv.style.visibility = 'hidden';
+      measureDiv.appendChild(label.cloneNode(true));
+      document.body.appendChild(measureDiv);
+      
       // Update dimensions based on actual label size
-      labelWidth = label.offsetWidth > 0 ? label.offsetWidth : 24; // Default width
-      labelHeight = label.offsetHeight > 0 ? label.offsetHeight : 16; // Default height
-
+      const labelWidth = measureDiv.firstChild.offsetWidth > 0 ? measureDiv.firstChild.offsetWidth : 24; // Default width
+      const labelHeight = measureDiv.firstChild.offsetHeight > 0 ? measureDiv.firstChild.offsetHeight : 16; // Default height
+      
+      // Remove the temporary div
+      document.body.removeChild(measureDiv);
+      
       const firstRectTop = firstRect.top + iframeOffset.y;
       const firstRectLeft = firstRect.left + iframeOffset.x;
+      const firstRectWidth = firstRect.width;
+      const firstRectHeight = firstRect.height;
 
-      // Check if bounding box is too small for label placement
-      const isBoundingBoxTooSmall = firstRect.height <= 2 * labelHeight || firstRect.width <= 2 * labelWidth;
+      // Position label with fallback strategies for small elements - optimized version
+      let labelTop = firstRectTop;
+      let labelLeft = firstRectLeft;
       
-      let labelTop, labelLeft;
+      // Only run the fallback logic if bounding box is too small
+      const isTooNarrow = firstRectWidth <= 1.5 * labelWidth;
+      const isTooShort = firstRectHeight <= 1.5 * labelHeight;
       
-      if (isBoundingBoxTooSmall) {
-        // First fallback: Try to place label to the left of bounding box
-        const spaceOnLeft = firstRectLeft;
-        const requiredSpaceForLeft = labelWidth + 1; // 1px margin
-        
-        if (spaceOnLeft >= requiredSpaceForLeft) {
-          // Place label to the left, aligned with top of bounding box
-          labelTop = firstRectTop;
-          labelLeft = firstRectLeft - labelWidth - 1;
-        } else {
-          // Final fallback: Place label above bounding box, aligned with left
-          labelTop = firstRectTop - labelHeight - 1;
-          labelLeft = firstRectLeft;
-        }
-      } else {
-        // Default positioning: top-left corner of the bounding box
-        labelTop = firstRectTop;
-        labelLeft = firstRectLeft;
+      // Simple fallback strategy - if element is too small and there's room on the left, place it there
+      if ((isTooNarrow || isTooShort) && firstRectLeft > labelWidth) {
+        // Use the left-side placement without performing elementFromPoint (faster)
+        labelLeft = firstRectLeft - labelWidth;
       }
 
       label.style.top = `${labelTop}px`;
       label.style.left = `${labelLeft}px`;
 
+      // Add label to fragment
       fragment.appendChild(label);
 
       // Update positions on scroll/resize
@@ -417,9 +419,23 @@
           const firstNewRectTop = firstNewRect.top + newIframeOffset.y;
           const firstNewRectLeft = firstNewRect.left + newIframeOffset.x;
 
-          // Position label at top-left corner of the bounding box
-          const newLabelTop = firstNewRectTop;
-          const newLabelLeft = firstNewRectLeft;
+          // Get current label dimensions
+          const currentLabelWidth = label.offsetWidth > 0 ? label.offsetWidth : 24;
+          const currentLabelHeight = label.offsetHeight > 0 ? label.offsetHeight : 16;
+          
+          // Apply simplified positioning logic for updates to match initial placement
+          let newLabelTop = firstNewRectTop;
+          let newLabelLeft = firstNewRectLeft;
+          
+          // Only run the fallback logic if bounding box is too small
+          const isNewTooNarrow = firstNewRect.width <= 1.5 * currentLabelWidth;
+          const isNewTooShort = firstNewRect.height <= 1.5 * currentLabelHeight;
+          
+          // Simple fallback strategy - if element is too small and there's room on the left, place it there
+          if ((isNewTooNarrow || isNewTooShort) && firstNewRectLeft > currentLabelWidth) {
+            // Use the left-side placement without performing elementFromPoint (faster)
+            newLabelLeft = firstNewRectLeft - currentLabelWidth;
+          }
 
           label.style.top = `${newLabelTop}px`;
           label.style.left = `${newLabelLeft}px`;
