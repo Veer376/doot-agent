@@ -357,18 +357,39 @@
       const firstRectWidth = firstRect.width;
       const firstRectHeight = firstRect.height;
 
-      // Position label with fallback strategies for small elements - optimized version
-      let labelTop = firstRectTop;
-      let labelLeft = firstRectLeft;
+      // Position label with fallback strategies for small elements
+      let labelTop, labelLeft;
       
-      // Only run the fallback logic if bounding box is too small
+      // Check if bounding box is too small
       const isTooNarrow = firstRectWidth <= 1.5 * labelWidth;
       const isTooShort = firstRectHeight <= 1.5 * labelHeight;
       
-      // Simple fallback strategy - if element is too small and there's room on the left, place it there
-      if ((isTooNarrow || isTooShort) && firstRectLeft > labelWidth) {
-        // Use the left-side placement without performing elementFromPoint (faster)
-        labelLeft = firstRectLeft - labelWidth;
+      // Default position - attach to top-left corner of the bounding box
+      if (!isTooNarrow && !isTooShort) {
+        labelTop = firstRectTop;
+        labelLeft = firstRectLeft;
+      } 
+      // First fallback - place label to the left of the bounding box
+      else if ((isTooNarrow || isTooShort) && firstRectLeft > labelWidth) {
+        // Check if there's space on the left
+        const testPoint = document.elementFromPoint(firstRectLeft - labelWidth / 2, firstRectTop + labelHeight / 2);
+        const hasSpaceOnLeft = !testPoint || testPoint.classList.contains('playwright-highlight-label') || 
+                               testPoint.id === HIGHLIGHT_CONTAINER_ID;
+        
+        if (hasSpaceOnLeft) {
+          // Align top edges, place left of the box
+          labelTop = firstRectTop;
+          labelLeft = firstRectLeft - labelWidth;
+        } else {
+          // Second fallback - place above the box
+          labelTop = firstRectTop - labelHeight;
+          labelLeft = firstRectLeft;
+        }
+      } 
+      // Final fallback - place label at top-left (default position) if other conditions don't apply
+      else {
+        labelTop = firstRectTop;
+        labelLeft = firstRectLeft;
       }
 
       label.style.top = `${labelTop}px`;
@@ -423,18 +444,39 @@
           const currentLabelWidth = label.offsetWidth > 0 ? label.offsetWidth : 24;
           const currentLabelHeight = label.offsetHeight > 0 ? label.offsetHeight : 16;
           
-          // Apply simplified positioning logic for updates to match initial placement
-          let newLabelTop = firstNewRectTop;
-          let newLabelLeft = firstNewRectLeft;
+          // Apply the same positioning logic as initial placement
+          let newLabelTop, newLabelLeft;
+          const newFirstRectWidth = firstNewRect.width;
+          const newFirstRectHeight = firstNewRect.height;
           
-          // Only run the fallback logic if bounding box is too small
-          const isNewTooNarrow = firstNewRect.width <= 1.5 * currentLabelWidth;
-          const isNewTooShort = firstNewRect.height <= 1.5 * currentLabelHeight;
+          // Check if bounding box is too small
+          const isNewTooNarrow = newFirstRectWidth <= 1.5 * currentLabelWidth;
+          const isNewTooShort = newFirstRectHeight <= 1.5 * currentLabelHeight;
           
-          // Simple fallback strategy - if element is too small and there's room on the left, place it there
-          if ((isNewTooNarrow || isNewTooShort) && firstNewRectLeft > currentLabelWidth) {
-            // Use the left-side placement without performing elementFromPoint (faster)
-            newLabelLeft = firstNewRectLeft - currentLabelWidth;
+          // Default position - attach to top-left corner
+          if (!isNewTooNarrow && !isNewTooShort) {
+            newLabelTop = firstNewRectTop;
+            newLabelLeft = firstNewRectLeft;
+          } 
+          // First fallback - place label to the left
+          else if ((isNewTooNarrow || isNewTooShort) && firstNewRectLeft > currentLabelWidth) {
+            // Check if there's space on the left
+            const testPoint = document.elementFromPoint(firstNewRectLeft - currentLabelWidth / 2, firstNewRectTop + currentLabelHeight / 2);
+            const hasSpaceOnLeft = !testPoint || testPoint.classList.contains('playwright-highlight-label') || 
+                               testPoint.id === HIGHLIGHT_CONTAINER_ID;            if (hasSpaceOnLeft) {
+              // Align top edges, place left of the box
+              newLabelTop = firstNewRectTop;
+              newLabelLeft = firstNewRectLeft - currentLabelWidth;
+            } else {
+              // Second fallback - place above the box
+              newLabelTop = firstNewRectTop - currentLabelHeight;
+              newLabelLeft = firstNewRectLeft;
+            }
+          } 
+          // Final fallback - use default position if other conditions don't apply
+          else {
+            newLabelTop = firstNewRectTop;
+            newLabelLeft = firstNewRectLeft;
           }
 
           label.style.top = `${newLabelTop}px`;
