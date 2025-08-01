@@ -1,0 +1,21 @@
+# Task 10: Sort Items and Verify
+task_id: saucedemo_sort_items_10
+start_url: "https://www.saucedemo.com/inventory.html"
+goal: "After logging in as 'standard_user', sort the items by 'Price (high to low)' and verify the first item is the 'Sauce Labs Fleece Jacket'."
+golden_path:
+  - action: "type_text"
+    element: { id: "user-name" }
+    text: "standard_user"
+  - action: "type_text"
+    element: { id: "password" }
+    text: "secret_sauce"
+  - action: "click_element"
+    element: { id: "login-button" }
+  - action: "select_option"
+    element: { class: "product_sort_container" }
+    value: "hilo"
+eval:
+  # The first inventory item name should be the most expensive one.
+  type: "element_text_equals"
+  element: { selector: ".inventory_item_name", index: 0 }
+  text: "Sauce Labs Fleece Jacket"

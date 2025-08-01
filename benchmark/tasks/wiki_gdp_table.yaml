@@ -1,0 +1,10 @@
+# Task 03: Finding Information in a Table
+task_id: wiki_gdp_table_03
+start_url: "https://en.wikipedia.org/wiki/List_of_countries_by_GDP_(nominal)"
+goal: "Find the GDP of Japan from the table on the Wikipedia page for countries by GDP."
+golden_path:
+  - action: "extract_text"
+eval:
+  type: "string_exists"
+  # This string is specific enough to likely only appear in the correct table row.
+  string: "Japan"

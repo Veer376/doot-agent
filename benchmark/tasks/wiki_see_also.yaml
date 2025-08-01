@@ -1,0 +1,17 @@
+# Task 02: Navigating a "See Also" Link
+task_id: wiki_see_also_02
+start_url: "https://en.wikipedia.org/wiki/Web_browser"
+goal: "From the World Wide Web Wikipedia page, navigate to the page for 'Web browser' using a link in the 'See also' section, and find the name and year of the second developed web browser."
+golden_path:
+  - action: "click_element"
+    element:
+      role: "link"
+      text: "Web browser"
+  - action: "extract_text"
+eval:
+  type: "and"
+  conditions:
+    - type: "url_contains"
+      substring: "/wiki/Web_browser"
+    - type: "string_exists"
+      string: "Line Mode Browser"

@@ -1,0 +1,12 @@
+# Task 23: File Download
+task_id: internet_download_23
+start_url: "https://the-internet.herokuapp.com/download"
+goal: "Download the 'some-file.txt' file."
+golden_path:
+  - action: "click_element"
+    element: { text: "some-file.txt" }
+eval:
+  # The evaluation script must check if a file with this name
+  # was successfully downloaded to the designated directory.
+  type: "file_downloaded"
+  filename: "some-file.txt"

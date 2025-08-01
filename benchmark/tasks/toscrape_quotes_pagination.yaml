@@ -1,0 +1,15 @@
+# Task 22: Pagination - Go to Next Page and Scrape
+task_id: toscrape_quotes_pagination_22
+start_url: "http://quotes.toscrape.com/"
+goal: "Navigate to the second page of quotes and find the first quote on that page."
+golden_path:
+  - action: "click_element"
+    element: { text: "Next →" }
+  - action: "extract_text"
+eval:
+  type: "and"
+  conditions:
+    - type: "url_contains"
+      substring: "/page/2/"
+    - type: "string_exists"
+      string: "“This life is what you make it. No matter what, you're going to mess up sometimes, it's a universal truth.”"

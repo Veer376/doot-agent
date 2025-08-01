@@ -1,0 +1,17 @@
+# Task 07: Date Picker Interaction
+task_id: formy_datepicker_07
+start_url: "https://formy-project.herokuapp.com/datepicker"
+goal: "Open the date picker and select the first day of next month."
+golden_path:
+  - action: "click_element"
+    element: { id: "datepicker" }
+  - action: "click_element"
+    element: { class: "next" } # Clicks the "next month" arrow
+  - action: "click_element"
+    element: { text: "1" } # Clicks the first day
+eval:
+  # The final state should have the input field populated with the correct date.
+  # This requires the evaluation script to calculate the expected date string.
+  type: "element_value_equals"
+  element: { id: "datepicker" }
+  value: "[FIRST_DAY_OF_NEXT_MONTH]"

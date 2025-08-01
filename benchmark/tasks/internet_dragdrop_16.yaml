@@ -1,0 +1,13 @@
+# Task 16: Drag and Drop
+task_id: internet_dragdrop_16
+start_url: "https://the-internet.herokuapp.com/drag_and_drop"
+goal: "Drag box A to the position of box B."
+golden_path:
+  - action: "drag_and_drop"
+    source_element: { id: "column-a" }
+    target_element: { id: "column-b" }
+eval:
+  # After a successful drag and drop, the header of the first box should be 'B'.
+  type: "element_text_equals"
+  element: { selector: "#column-a header" }
+  text: "B"

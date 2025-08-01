@@ -1,0 +1,13 @@
+# Task 29: Find and Verify Broken Image
+task_id: internet_broken_image_29
+start_url: "https://the-internet.herokuapp.com/broken_images"
+goal: "Verify that there are broken images on the page."
+golden_path:
+  - action: "verify_element_property"
+    # This is a conceptual action. The agent would need a tool to check
+    # an image's `naturalWidth` property. If it's 0, the image is broken.
+eval:
+  type: "element_property_equals"
+  element: { selector: "img", index: 1 } # The second image is usually broken
+  property: "naturalWidth"
+  value: "0"

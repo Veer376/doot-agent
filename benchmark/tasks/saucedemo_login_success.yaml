@@ -1,0 +1,16 @@
+# Task 04: Simple Login (Success)
+task_id: saucedemo_login_success_04
+start_url: "https://www.saucedemo.com/"
+goal: "Log in with the username 'standard_user' and password 'secret_sauce'."
+golden_path:
+  - action: "type_text"
+    element: { id: "user-name" }
+    text: "standard_user"
+  - action: "type_text"
+    element: { id: "password" }
+    text: "secret_sauce"
+  - action: "click_element"
+    element: { id: "login-button" }
+eval:
+  type: "url_contains"
+  substring: "/inventory.html"

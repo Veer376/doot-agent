@@ -1,0 +1,15 @@
+# Task 20: Scrape a List of Items
+task_id: toscrape_books_20
+start_url: "http://books.toscrape.com/"
+goal: "Scrape the titles of the first five books listed on the main page."
+golden_path:
+  - action: "extract_text"
+    # This is a pure extraction task, so the golden path is minimal.
+eval:
+  type: "and"
+  conditions:
+    - { type: "string_exists", string: "A Light in the Attic" }
+    - { type: "string_exists", string: "Tipping the Velvet" }
+    - { type: "string_exists", string: "Soumission" }
+    - { type: "string_exists", string: "Sharp Objects" }
+    - { type: "string_exists", string: "Sapiens: A Brief History of Humankind" }

@@ -1,0 +1,16 @@
+# Task 05: Simple Login (Failure)
+task_id: saucedemo_login_fail_05
+start_url: "https://www.saucedemo.com/"
+goal: "Attempt to log in with the username 'locked_out_user' and password 'secret_sauce' and report the error message."
+golden_path:
+  - action: "type_text"
+    element: { id: "user-name" }
+    text: "locked_out_user"
+  - action: "type_text"
+    element: { id: "password" }
+    text: "secret_sauce"
+  - action: "click_element"
+    element: { id: "login-button" }
+eval:
+  type: "string_exists"
+  string: "Epic sadface: Sorry, this user has been locked out."

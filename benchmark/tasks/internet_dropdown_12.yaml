@@ -1,0 +1,12 @@
+# Task 12: Handling a Dropdown Menu
+task_id: internet_dropdown_12
+start_url: "https://the-internet.herokuapp.com/dropdown"
+goal: "Select 'Option 2' from the dropdown menu."
+golden_path:
+  - action: "select_option"
+    element: { id: "dropdown" }
+    value: "2" # The value attribute for Option 2
+eval:
+  type: "element_has_attribute"
+  element: { selector: "option[value='2']" }
+  attribute: "selected"

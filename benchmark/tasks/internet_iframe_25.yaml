@@ -1,0 +1,15 @@
+# Task 25: Handling iFrames
+task_id: internet_iframe_25
+start_url: "https://the-internet.herokuapp.com/iframe"
+goal: "Inside the iframe, clear the existing text and type 'Hello, agent!'."
+golden_path:
+  - action: "type_text"
+    element:
+      # We target the element inside the iframe. The agent must be able to handle this.
+      iframe_selector: "#mce_0_ifr"
+      selector: "#tinymce"
+    text: "Hello, agent!"
+eval:
+  type: "iframe_contains_string"
+  iframe_selector: "#mce_0_ifr"
+  string: "Hello, agent!"

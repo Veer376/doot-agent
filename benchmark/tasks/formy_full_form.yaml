@@ -1,0 +1,27 @@
+# Task 06: Full Form Submission with Various Inputs
+task_id: formy_full_form_06
+start_url: "https://formy-project.herokuapp.com/form"
+goal: "Fill out the entire form with plausible data, select the highest level of education, and submit it."
+golden_path:
+  - action: "type_text"
+    element: { id: "first-name" }
+    text: "John"
+  - action: "type_text"
+    element: { id: "last-name" }
+    text: "Doe"
+  - action: "type_text"
+    element: { id: "job-title" }
+    text: "Software Engineer"
+  - action: "click_element"
+    element: { id: "radio-button-3" } # Grad school
+  - action: "click_element"
+    element: { id: "checkbox-1" } # Male
+  - action: "click_element"
+    element: { role: "button", text: "Submit" }
+eval:
+  type: "and"
+  conditions:
+    - type: "url_contains"
+      substring: "/thanks"
+    - type: "string_exists"
+      string: "The form was successfully submitted!"

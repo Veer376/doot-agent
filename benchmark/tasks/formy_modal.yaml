@@ -1,0 +1,13 @@
+# Task 17: Interacting with a Modal Window
+task_id: formy_modal_17
+start_url: "https://formy-project.herokuapp.com/modal"
+goal: "Open the modal, and then close it by clicking the 'Close' button."
+golden_path:
+  - action: "click_element"
+    element: { id: "modal-button" }
+  - action: "click_element"
+    element: { id: "close-button" }
+eval:
+  # The modal should no longer be visible after being closed.
+  type: "element_not_visible"
+  element: { id: "exampleModalLabel" }

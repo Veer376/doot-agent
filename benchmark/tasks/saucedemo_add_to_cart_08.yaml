@@ -1,0 +1,18 @@
+# Task 08: Add Item to Cart
+task_id: saucedemo_add_to_cart_08
+start_url: "https://www.saucedemo.com/"
+goal: "Log in as 'standard_user', add the 'Sauce Labs Bolt T-Shirt' to the cart."
+golden_path:
+  - action: "type_text"
+    element: { id: "user-name" }
+    text: "standard_user"
+  - action: "type_text"
+    element: { id: "password" }
+    text: "secret_sauce"
+  - action: "click_element"
+    element: { id: "login-button" }
+  - action: "click_element"
+    element: { id: "add-to-cart-sauce-labs-bolt-t-shirt" }
+eval:
+  type: "string_exists"
+  string: "Remove" # The button text changes from "Add to cart" to "Remove"

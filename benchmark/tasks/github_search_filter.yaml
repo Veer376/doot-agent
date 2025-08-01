@@ -1,0 +1,21 @@
+# Task 28: Complex Search and Filter
+task_id: github_search_filter_28
+start_url: "https://github.com/"
+goal: "Search for 'playwright' on GitHub, then filter the results to show only those written in the 'Python' language."
+golden_path:
+  - action: "type_text"
+    element: { placeholder: "Search or jump to..." }
+    text: "playwright"
+  - action: "press_key"
+    key: "Enter"
+  - action: "click_element"
+    element: { text: "Python" }
+eval:
+  type: "and"
+  conditions:
+    - type: "url_contains"
+      substring: "q=playwright"
+    - type: "url_contains"
+      substring: "l=Python"
+    - type: "string_exists"
+      string: "microsoft/playwright-python"

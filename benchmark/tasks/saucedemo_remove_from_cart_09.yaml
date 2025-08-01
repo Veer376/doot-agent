@@ -1,0 +1,21 @@
+# Task 09: Add and Remove Item from Cart
+task_id: saucedemo_remove_from_cart_09
+start_url: "https://www.saucedemo.com/"
+goal: "Log in as 'standard_user', add the 'Sauce Labs Fleece Jacket' to the cart, then remove it."
+golden_path:
+  - action: "type_text"
+    element: { id: "user-name" }
+    text: "standard_user"
+  - action: "type_text"
+    element: { id: "password" }
+    text: "secret_sauce"
+  - action: "click_element"
+    element: { id: "login-button" }
+  - action: "click_element"
+    element: { id: "add-to-cart-sauce-labs-fleece-jacket" }
+  - action: "click_element"
+    element: { id: "remove-sauce-labs-fleece-jacket" }
+eval:
+  # The cart badge should not exist or be empty after removal.
+  type: "element_not_exists"
+  element: { class: "shopping_cart_badge" }

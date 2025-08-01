@@ -1,0 +1,14 @@
+# Task 24: File Upload
+task_id: internet_upload_24
+start_url: "https://the-internet.herokuapp.com/upload"
+goal: "Upload the 'some-file.txt' file and submit."
+golden_path:
+  - action: "upload_file"
+    element: { id: "file-upload" }
+    # The evaluation script must create this file for the agent to use.
+    filepath: "[UPLOAD_DIR]/some-file.txt"
+  - action: "click_element"
+    element: { id: "file-submit" }
+eval:
+  type: "string_exists"
+  string: "File Uploaded!"

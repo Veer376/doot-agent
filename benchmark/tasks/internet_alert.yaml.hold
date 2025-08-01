@@ -1,0 +1,11 @@
+# Task 15: Handling a JavaScript Alert
+task_id: internet_alert_15
+start_url: "https://the-internet.herokuapp.com/javascript_alerts"
+goal: "Click the 'Click for JS Confirm' button and then accept the alert."
+golden_path:
+  - action: "click_element"
+    element: { text: "Click for JS Confirm" }
+  - action: "accept_alert"
+eval:
+  type: "string_exists"
+  string: "You clicked: Ok"

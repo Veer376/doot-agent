@@ -1,0 +1,26 @@
+# ==============================================================================
+# BENCHMARK SUITE FOR ORBIT-AGENT
+# ==============================================================================
+# This suite is designed to test the agent's capabilities using the
+# available tools in the current implementation.
+# ==============================================================================
+
+categories:
+  - name: "Basic Navigation"
+    description: "Tasks focused on basic browser navigation."
+    tasks:
+      - wiki_navigation_01
+      - google_search_02
+
+  - name: "Form Interaction"
+    description: "Tasks requiring interaction with forms and input elements."
+    tasks:
+      - saucedemo_login_03
+      - google_search_form_04
+
+  - name: "Multi-Tab Operations"
+    description: "Tasks requiring operations across multiple tabs."
+    tasks:
+      - tab_creation_05
+      - tab_switching_06
+      - github_search_filter_28

@@ -1,0 +1,10 @@
+# Task 01: Simple Wikipedia Fact Finding
+task_id: wiki_python_creator_01
+start_url: "https://en.wikipedia.org/wiki/Python_(programming_language)"
+goal: "On the Wikipedia page for the Python programming language, find the name of its creator."
+golden_path:
+  - action: "extract_text"
+    # This task is simple enough that the final eval is the main check.
+eval:
+  type: "string_exists"
+  string: "Guido van Rossum"

@@ -1,0 +1,11 @@
+# Task 27: Waiting for a Dynamic Element to Appear
+task_id: internet_dynamic_load_27
+start_url: "https://the-internet.herokuapp.com/dynamic_loading/2"
+goal: "Click the 'Start' button and wait for the 'Hello World!' text to appear."
+golden_path:
+  - action: "click_element"
+    element: { text: "Start" }
+  # The agent must implicitly wait for the element to appear before the task can be completed.
+eval:
+  type: "string_exists"
+  string: "Hello World!"

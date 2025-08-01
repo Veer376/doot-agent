@@ -1,0 +1,12 @@
+# Task 14: Interacting with Hovers
+task_id: internet_hover_14
+start_url: "https://the-internet.herokuapp.com/hovers"
+goal: "Hover over the first user profile image and click the 'View profile' link that appears."
+golden_path:
+  - action: "hover_element"
+    element: { selector: ".figure", index: 0 }
+  - action: "click_element"
+    element: { selector: "a[href='/users/1']" }
+eval:
+  type: "url_contains"
+  substring: "/users/1"

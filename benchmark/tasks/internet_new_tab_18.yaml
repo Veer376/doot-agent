@@ -1,0 +1,12 @@
+# Task 18: Open Link in New Tab and Switch
+task_id: internet_new_tab_18
+start_url: "https://the-internet.herokuapp.com/windows"
+goal: "Click the link to open a new window, then switch to the new window and verify its content."
+golden_path:
+  - action: "click_element"
+    element: { text: "Click Here" }
+  - action: "switch_to_tab"
+    tab_index: 1
+eval:
+  type: "string_exists"
+  string: "New Window"

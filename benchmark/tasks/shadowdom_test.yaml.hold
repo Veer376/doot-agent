@@ -1,0 +1,9 @@
+# Task 26: Reading Shadow DOM Elements
+task_id: shadowdom_test_26
+start_url: "http://watir.com/examples/shadow_dom.html"
+goal: "Find the text that is inside the shadow DOM."
+golden_path:
+  - action: "extract_text"
+eval:
+  type: "string_exists"
+  string: "some text"

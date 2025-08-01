@@ -1,0 +1,15 @@
+# Task 30: Multi-Step Data Aggregation
+task_id: toscrape_multipage_scrape_30
+start_url: "http://quotes.toscrape.com/"
+goal: "Visit the first two pages of quotes and count the total number of quotes authored by 'Albert Einstein'."
+golden_path:
+  - action: "extract_text" # Scrape page 1
+  - action: "click_element"
+    element: { text: "Next →" }
+  - action: "extract_text" # Scrape page 2
+  - action: "finish_task"
+    # The agent must internally count and provide the final answer.
+eval:
+  # The agent's final output/answer should contain the correct count.
+  type: "string_exists"
+  string: "4" # There are 4 Einstein quotes across the first two pages.

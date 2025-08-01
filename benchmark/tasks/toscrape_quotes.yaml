@@ -1,0 +1,9 @@
+# Task 21: Scrape Data from a Table
+task_id: toscrape_quotes_21
+start_url: "http://quotes.toscrape.com/tableful/"
+goal: "Find the quote by 'Jane Austen' and extract its text."
+golden_path:
+  - action: "extract_text"
+eval:
+  type: "string_exists"
+  string: "“The person, be it gentleman or lady, who has not pleasure in a good novel, must be intolerably stupid.”"

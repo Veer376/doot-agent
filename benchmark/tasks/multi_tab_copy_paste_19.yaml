@@ -1,0 +1,24 @@
+# Task 19: Find Info on One Tab, Use it on Another
+task_id: multi_tab_copy_paste_19
+start_url: "https://en.wikipedia.org/wiki/Cat"
+goal: "Find the scientific name for 'cat' on Wikipedia, then open a new tab, go to Google, and search for that scientific name."
+golden_path:
+  - action: "get_text"
+    element: { selector: ".infobox .binomial" }
+    # The agent needs to store "Felis catus" in its memory/scratchpad
+  - action: "create_new_tab"
+  - action: "navigate_to_url"
+    url: "https://www.google.com"
+  - action: "type_text"
+    element: { name: "q" }
+    text: "Felis catus"
+  - action: "click_element"
+    element: { role: "button", aria-label: "Google Search" }
+eval:
+  type: "and"
+  conditions:
+    - type: "url_contains"
+      substring: "google.com/search"
+    - type: "element_value_equals"
+      element: { name: "q" }
+      value: "Felis catus"

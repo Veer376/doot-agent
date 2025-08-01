@@ -1,0 +1,35 @@
+# Task 11: Full Checkout Process
+task_id: saucedemo_checkout_11
+start_url: "https://www.saucedemo.com/"
+goal: "Log in as 'standard_user', add any item to the cart, go to the cart, proceed to checkout, fill in the details (First Name: Test, Last Name: User, Zip: 12345), and finish the checkout process."
+golden_path:
+  - action: "type_text"
+    element: { id: "user-name" }
+    text: "standard_user"
+  - action: "type_text"
+    element: { id: "password" }
+    text: "secret_sauce"
+  - action: "click_element"
+    element: { id: "login-button" }
+  - action: "click_element"
+    element: { text: "Add to cart" } # Clicks the first available add to cart button
+  - action: "click_element"
+    element: { class: "shopping_cart_link" }
+  - action: "click_element"
+    element: { id: "checkout" }
+  - action: "type_text"
+    element: { id: "first-name" }
+    text: "Test"
+  - action: "type_text"
+    element: { id: "last-name" }
+    text: "User"
+  - action: "type_text"
+    element: { id: "postal-code" }
+    text: "12345"
+  - action: "click_element"
+    element: { id: "continue" }
+  - action: "click_element"
+    element: { id: "finish" }
+eval:
+  type: "string_exists"
+  string: "Thank you for your order!"

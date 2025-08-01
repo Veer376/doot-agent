@@ -1,0 +1,16 @@
+# Task 13: Checking a Checkbox
+task_id: internet_checkbox_13
+start_url: "https://the-internet.herokuapp.com/checkboxes"
+goal: "Ensure the first checkbox is checked and the second checkbox is unchecked."
+golden_path:
+  - action: "click_element"
+    element: { selector: "input[type='checkbox']", index: 0 } # Check the first box
+  - action: "click_element"
+    element: { selector: "input[type='checkbox']", index: 1 } # Uncheck the second box
+eval:
+  type: "and"
+  conditions:
+    - type: "element_is_checked"
+      element: { selector: "input[type='checkbox']", index: 0 }
+    - type: "element_is_not_checked"
+      element: { selector: "input[type='checkbox']", index: 1 }
