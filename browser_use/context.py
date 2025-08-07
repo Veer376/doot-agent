@@ -31,7 +31,7 @@ from .dom.clickable_element_processor.service import ClickableElementProcessor
 from .dom.service import DomService
 from .dom.types import DOMElementNode, SelectorMap
 from .utils import time_execution_async, time_execution_sync
-from .simulator import Simulator
+from .animator import Animator
 
 if TYPE_CHECKING:
     from .browser import Browser
@@ -187,7 +187,7 @@ class BrowserContextConfig(BaseModel):
     force_new_context: bool = False
 
     # TODO: implement trigger.
-    simulate_actions: bool = True
+    animate_actions: bool = True
 
 
 @dataclass
@@ -243,7 +243,7 @@ class BrowserContext:
 
         # Initialize these as None - they'll be set up when needed
         self.session: BrowserSession | None = None
-        self.simulator = Simulator(None)
+        self.animator = Animator(None)
 
         # Tab references - separate concepts for agent intent and browser state
         self.agent_current_page: Page | None = (
@@ -337,8 +337,8 @@ class BrowserContext:
         context.on("page", self._add_tab_foregrounding_listener)
 
         # TODO: what if we make it asyncio.
-        # await context.add_init_script(self.simulator.simulator_script)
-        
+        # await context.add_init_script(self.animator.animator_script)
+
         # Get or create a page to use
         pages = context.pages
 
@@ -398,8 +398,8 @@ class BrowserContext:
         # Initialize both tab references to the same page initially
         self.agent_current_page = current_page
         self.human_current_page = current_page
-        self.simulator.page = current_page
-        
+        self.animator.page = current_page
+
         # Set up visibility listeners for all existing tabs
         for page in pages:
             if (
@@ -461,29 +461,29 @@ class BrowserContext:
 
             # Set up multiple visibility detection methods in the browser
             js_code = """() => {
-				// --- Method 1: visibilitychange event (unfortunately *all* tabs are always marked visible by playwright, usually does not fire) ---
-				document.addEventListener('visibilitychange', () => {
-					if (document.visibilityState === 'visible') {
-						window.onVisibilityChange_TABID({ source: 'visibilitychange' });
-					}
-				});
-				
-				// --- Method 2: focus/blur events, most reliable method for headful browsers ---
-				window.addEventListener('focus', () => {
-					window.onVisibilityChange_TABID({ source: 'focus' });
-				});
-				
-				// --- Method 3: pointermove events (may be fired by agent if we implement AI hover movements) ---
-				// Use a throttled handler to avoid excessive calls
-				// let lastMove = 0;
-				// window.addEventListener('pointermove', () => {
-				// 	const now = Date.now();
-				// 	if (now - lastMove > 1000) {  // Throttle to once per second
-				// 		lastMove = now;
-				// 		window.onVisibilityChange_TABID({ source: 'pointermove' });
-				// 	}
-				// });
-			}""".replace(
+                // --- Method 1: visibilitychange event (unfortunately *all* tabs are always marked visible by playwright, usually does not fire) ---
+                document.addEventListener('visibilitychange', () => {
+                    if (document.visibilityState === 'visible') {
+                        window.onVisibilityChange_TABID({ source: 'visibilitychange' });
+                    }
+                });
+                
+                // --- Method 2: focus/blur events, most reliable method for headful browsers ---
+                window.addEventListener('focus', () => {
+                    window.onVisibilityChange_TABID({ source: 'focus' });
+                });
+                
+                // --- Method 3: pointermove events (may be fired by agent if we implement AI hover movements) ---
+                // Use a throttled handler to avoid excessive calls
+                // let lastMove = 0;
+                // window.addEventListener('pointermove', () => {
+                // 	const now = Date.now();
+                // 	if (now - lastMove > 1000) {  // Throttle to once per second
+                // 		lastMove = now;
+                // 		window.onVisibilityChange_TABID({ source: 'pointermove' });
+                // 	}
+                // });
+            }""".replace(
                 "onVisibilityChange_TABID", visibility_func_name
             )
             # multiple reasons for doing it this way ^: stealth, uniqueness, sometimes pageload is cancelled and it runs twice, etc.
@@ -627,9 +627,9 @@ class BrowserContext:
     async def get_agent_current_page(self) -> Page:
         page = await self._find_and_get_agent_current_page()
         self.agent_current_page = page
-        # update the Simulator
-        self.simulator.page = page
-        await page.evaluate(self.simulator.simulator_script)
+        # update the Animator
+        self.animator.page = page
+        await page.evaluate(self.animator.animator_script)
         return page
 
     async def _create_context(self, browser: PlaywrightBrowser):
@@ -749,54 +749,54 @@ class BrowserContext:
                     logger.error(f"Failed to parse cookies file: {str(e)}")
 
         init_script = """
-			// check to make sure we're not inside the PDF viewer
-			window.isPdfViewer = !!document?.body?.querySelector('body > embed[type="application/pdf"][width="100%"]')
-			if (!window.isPdfViewer) {
-	
-				// Permissions
-				const originalQuery = window.navigator.permissions.query;
-				window.navigator.permissions.query = (parameters) => (
-					parameters.name === 'notifications' ?
-						Promise.resolve({ state: Notification.permission }) :
-						originalQuery(parameters)
-				);
-				(() => {
-					if (window._eventListenerTrackerInitialized) return;
-					window._eventListenerTrackerInitialized = true;
+            // check to make sure we're not inside the PDF viewer
+            window.isPdfViewer = !!document?.body?.querySelector('body > embed[type="application/pdf"][width="100%"]')
+            if (!window.isPdfViewer) {
+    
+                // Permissions
+                const originalQuery = window.navigator.permissions.query;
+                window.navigator.permissions.query = (parameters) => (
+                    parameters.name === 'notifications' ?
+                        Promise.resolve({ state: Notification.permission }) :
+                        originalQuery(parameters)
+                );
+                (() => {
+                    if (window._eventListenerTrackerInitialized) return;
+                    window._eventListenerTrackerInitialized = true;
 
-					const originalAddEventListener = EventTarget.prototype.addEventListener;
-					const eventListenersMap = new WeakMap();
+                    const originalAddEventListener = EventTarget.prototype.addEventListener;
+                    const eventListenersMap = new WeakMap();
 
-					EventTarget.prototype.addEventListener = function(type, listener, options) {
-						if (typeof listener === "function") {
-							let listeners = eventListenersMap.get(this);
-							if (!listeners) {
-								listeners = [];
-								eventListenersMap.set(this, listeners);
-							}
+                    EventTarget.prototype.addEventListener = function(type, listener, options) {
+                        if (typeof listener === "function") {
+                            let listeners = eventListenersMap.get(this);
+                            if (!listeners) {
+                                listeners = [];
+                                eventListenersMap.set(this, listeners);
+                            }
 
-							listeners.push({
-								type,
-								listener,
-								listenerPreview: listener.toString().slice(0, 100),
-								options
-							});
-						}
+                            listeners.push({
+                                type,
+                                listener,
+                                listenerPreview: listener.toString().slice(0, 100),
+                                options
+                            });
+                        }
 
-						return originalAddEventListener.call(this, type, listener, options);
-					};
+                        return originalAddEventListener.call(this, type, listener, options);
+                    };
 
-					window.getEventListenersForNode = (node) => {
-						const listeners = eventListenersMap.get(node) || [];
-						return listeners.map(({ type, listenerPreview, options }) => ({
-							type,
-							listenerPreview,
-							options
-						}));
-					};
-				})();
-			}
-			"""
+                    window.getEventListenersForNode = (node) => {
+                        const listeners = eventListenersMap.get(node) || [];
+                        return listeners.map(({ type, listenerPreview, options }) => ({
+                            type,
+                            listenerPreview,
+                            options
+                        }));
+                    };
+                })();
+            }
+            """
 
         # Expose anti-detection scripts
         await context.add_init_script(init_script)
@@ -1001,12 +1001,250 @@ class BrowserContext:
             f"⚖️  Network stabilized for {self.config.wait_for_network_idle_page_load_time} seconds"
         )
 
+    async def _wait_for_dom_stability(
+        self,
+        timeout: float = 15.0,
+        stability_threshold_ms: int = 500,
+        long_task_threshold_ms: int = 50,
+    ):
+        """
+        Waits for dynamic page content to stabilize using a multi-signal framework.
+
+        This function injects and runs an advanced JavaScript class ('DynamicContentReady')
+        that confirms readiness by observing a combination of signals:
+        1. Main Thread Activity (PerformanceObserver for long tasks)
+        2. DOM Changes (MutationObserver)
+        3. Layout Shifts (ResizeObserver)
+
+        It first programmatically identifies the main content area of the page and
+        then waits for that specific area to become stable.
+
+        Args:
+            timeout: Maximum time to wait for stability, in seconds.
+            stability_threshold_ms: The "quiet period" in milliseconds required for
+                                    content and layout to be considered stable.
+            long_task_threshold_ms: The duration in milliseconds that qualifies a
+                                    browser task as a "long task," indicating a busy
+                                    main thread.
+
+        Returns:
+            True if the page content stabilizes within the timeout, False otherwise.
+        """
+        page = await self.get_agent_current_page()
+        logger.debug("Starting comprehensive DOM stability wait...")
+
+        # --- The Complete DynamicContentReady JavaScript Framework ---
+        # This class is injected into the browser context.
+        dcr_framework_script = """
+        class DynamicContentReady {
+            constructor(options = {}) {
+                this.options = {
+                    stabilityThreshold: 500,
+                    longTaskThreshold: 50,
+                    maxWaitTime: 15000,
+                    ...options,
+                };
+                this.state = 'IDLE';
+                this.perfObserver = null;
+                this.mutObserver = null;
+                this.resizeObserver = null;
+                this.targetElement = null;
+                this.isMainThreadBusy = false;
+                this.lastMutationTime = 0;
+                this.lastResizeTime = 0;
+                this.resolvePromise = null;
+                this.rejectPromise = null;
+                this.stabilityChecker = null;
+                this.timeoutHandle = null;
+            }
+
+            waitForReady() {
+                if (this.state !== 'IDLE') {
+                    return Promise.reject(new Error("DCR is already running."));
+                }
+                return new Promise((resolve, reject) => {
+                    this.resolvePromise = resolve;
+                    this.rejectPromise = reject;
+                    // Set a master timeout for the whole operation
+                    this.timeoutHandle = setTimeout(
+                        () => this._fail(`Operation timed out after ${this.options.maxWaitTime}ms`),
+                        this.options.maxWaitTime
+                    );
+                    this._transitionTo('IDENTIFYING');
+                });
+            }
+
+            _transitionTo(newState) {
+                console.log(`DCR State: ${this.state} -> ${newState}`);
+                this.state = newState;
+                this._onEnterState(newState);
+            }
+
+            _onEnterState(state) {
+                switch (state) {
+                    case 'IDENTIFYING':
+                        this.targetElement = this._findBestCandidateElement();
+                        if (this.targetElement) {
+                            this._transitionTo('MONITORING');
+                        } else {
+                            this._fail("Could not identify a target content area.");
+                        }
+                        break;
+                    case 'MONITORING':
+                        this._setupObservers();
+                        this._beginStabilityChecks();
+                        break;
+                    case 'STABLE':
+                        this._cleanup();
+                        this.resolvePromise({
+                            element: this.targetElement.tagName,
+                            reason: "All stability signals achieved."
+                        });
+                        this._transitionTo('IDLE');
+                        break;
+                }
+            }
+
+            _findBestCandidateElement() {
+                let bestCandidate = null;
+                let maxScore = -1;
+                document.querySelectorAll('body *').forEach(el => {
+                    if (this._isElementVisible(el)) {
+                        const score = this._calculateElementScore(el);
+                        if (score > maxScore) {
+                            maxScore = score;
+                            bestCandidate = el;
+                        }
+                    }
+                });
+                return bestCandidate;
+            }
+
+            _calculateElementScore(el) {
+                let score = 0;
+                const tagName = el.tagName.toUpperCase();
+                if (['SCRIPT', 'STYLE', 'NOSCRIPT', 'HEAD', 'META', 'LINK', 'TITLE'].includes(tagName)) return -1;
+
+                if (['MAIN', 'ARTICLE', 'SECTION'].includes(tagName)) score += 20;
+                if (['HEADER', 'NAV', 'FOOTER', 'ASIDE'].includes(tagName)) score -= 30;
+
+                const area = el.offsetWidth * el.offsetHeight;
+                if (area > 0) {
+                     score += Math.log(area + 1) * 2;
+                }
+
+                const textLength = el.textContent.trim().length;
+                const linkCount = el.querySelectorAll('a').length;
+                if (textLength > 100) {
+                    score += 15;
+                    if (linkCount > 0) {
+                        const density = textLength / (linkCount + 1);
+                        if (density > 50) score += 10;
+                    }
+                }
+                return score;
+            }
+
+            _isElementVisible(el) {
+                return !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
+            }
+
+            _setupObservers() {
+                this.lastMutationTime = this.lastResizeTime = Date.now();
+                this.isMainThreadBusy = false;
+
+                this.perfObserver = new PerformanceObserver((entryList) => {
+                    if (entryList.getEntries().length > 0) {
+                        this.isMainThreadBusy = true;
+                        setTimeout(() => { this.isMainThreadBusy = false; }, this.options.longTaskThreshold * 1.5);
+                    }
+                });
+                this.perfObserver.observe({ entryTypes: ['longtask'] });
+
+                this.mutObserver = new MutationObserver(() => { this.lastMutationTime = Date.now(); });
+                this.mutObserver.observe(this.targetElement, { childList: true, subtree: true, attributes: true, characterData: true });
+
+                this.resizeObserver = new ResizeObserver(() => { this.lastResizeTime = Date.now(); });
+                this.resizeObserver.observe(this.targetElement);
+            }
+
+            _beginStabilityChecks() {
+                this.stabilityChecker = setInterval(() => {
+                    const now = Date.now();
+                    const isLayoutStable = now - this.lastResizeTime > this.options.stabilityThreshold;
+                    const isContentStable = now - this.lastMutationTime > this.options.stabilityThreshold;
+                    const isThreadStable = !this.isMainThreadBusy;
+
+                    if (isLayoutStable && isContentStable && isThreadStable) {
+                        this._transitionTo('STABLE');
+                    }
+                }, 100);
+            }
+
+            _cleanup() {
+                if (this.stabilityChecker) clearInterval(this.stabilityChecker);
+                if (this.timeoutHandle) clearTimeout(this.timeoutHandle);
+                if (this.perfObserver) this.perfObserver.disconnect();
+                if (this.mutObserver) this.mutObserver.disconnect();
+                if (this.resizeObserver) this.resizeObserver.disconnect();
+            }
+
+            _fail(reason) {
+                this._cleanup();
+                this.rejectPromise(new Error(reason));
+                this._transitionTo('IDLE');
+            }
+        }
+        """
+
+        # Define the JS executor function separately for clarity.
+        # This function will be run in the browser's context.
+        executor_script = f"""
+            async (args) => {{
+                {dcr_framework_script}
+                const dcr = new DynamicContentReady(args.options);
+                try {{
+                    const result = await dcr.waitForReady();
+                    return {{ stable: true, ...result }};
+                }} catch (err) {{
+                    return {{ stable: false, reason: err.message }};
+                }}
+            }}
+        """
+
+        try:
+            # The argument object to pass to the executor_script.
+            script_args = {
+                "options": {
+                    "stabilityThreshold": stability_threshold_ms,
+                    "longTaskThreshold": long_task_threshold_ms,
+                    "maxWaitTime": timeout * 1000,
+                }
+            }
+
+            # Execute the script and pass the arguments.
+            result = await page.evaluate(executor_script, script_args)
+
+            if result.get("stable"):
+                logger.info(f"✅ DOM is stable. Reason: {result.get('reason')}")
+                return True
+            else:
+                logger.warning(
+                    f"⚠️ DOM did not stabilize. Reason: {result.get('reason')}"
+                )
+                return False
+
+        except Exception as e:
+            # This will catch Playwright-level errors (e.g., page closed).
+            logger.error(f"An exception occurred during the page.evaluate call: {e}")
+            return False
+
     async def _wait_for_page_and_frames_load(
         self, timeout_overwrite: float | None = None
     ):
         """
         Ensures page is fully loaded before continuing.
-        Waits for either network to be idle or minimum WAIT_TIME, whichever is longer.
+        Waits for network to be idle, DOM to stabilize, and enforces minimum wait time.
         Also checks if the loaded URL is allowed.
         """
         # Start timing
@@ -1014,15 +1252,22 @@ class BrowserContext:
 
         # Wait for page load
         try:
-            await self._wait_for_stable_network()
+            # await self._wait_for_stable_network()
 
             # Check if the loaded URL is allowed
             page = await self.get_agent_current_page()
+
+            # FIXME: figure out if we need this here.
+            await page.wait_for_load_state()
             await self._check_and_handle_navigation(page)
+
+            # wait for DOM to stabilize (especially important for JavaScript-heavy sites)
+            # await self._wait_for_dom_stability(stability_threshold_ms=1000)
+
         except URLNotAllowedError as e:
             raise e
-        except Exception:
-            logger.warning("⚠️  Page load failed, continuing...")
+        except Exception as e:
+            logger.warning(f"⚠️  Page load failed: {str(e)}, continuing...")
             pass
 
         # Calculate remaining time to meet minimum WAIT_TIME
@@ -1204,69 +1449,69 @@ class BrowserContext:
     async def get_page_structure(self) -> str:
         """Get a debug view of the page structure including iframes"""
         debug_script = """(() => {
-			function getPageStructure(element = document, depth = 0, maxDepth = 10) {
-				if (depth >= maxDepth) return '';
+            function getPageStructure(element = document, depth = 0, maxDepth = 10) {
+                if (depth >= maxDepth) return '';
 
-				const indent = '  '.repeat(depth);
-				let structure = '';
+                const indent = '  '.repeat(depth);
+                let structure = '';
 
-				// Skip certain elements that clutter the output
-				const skipTags = new Set(['script', 'style', 'link', 'meta', 'noscript']);
+                // Skip certain elements that clutter the output
+                const skipTags = new Set(['script', 'style', 'link', 'meta', 'noscript']);
 
-				// Add current element info if it's not the document
-				if (element !== document) {
-					const tagName = element.tagName.toLowerCase();
+                // Add current element info if it's not the document
+                if (element !== document) {
+                    const tagName = element.tagName.toLowerCase();
 
-					// Skip uninteresting elements
-					if (skipTags.has(tagName)) return '';
+                    // Skip uninteresting elements
+                    if (skipTags.has(tagName)) return '';
 
-					const id = element.id ? `#${element.id}` : '';
-					const classes = element.className && typeof element.className === 'string' ?
-						`.${element.className.split(' ').filter(c => c).join('.')}` : '';
+                    const id = element.id ? `#${element.id}` : '';
+                    const classes = element.className && typeof element.className === 'string' ?
+                        `.${element.className.split(' ').filter(c => c).join('.')}` : '';
 
-					// Get additional useful attributes
-					const attrs = [];
-					if (element.getAttribute('role')) attrs.push(`role="${element.getAttribute('role')}"`);
-					if (element.getAttribute('aria-label')) attrs.push(`aria-label="${element.getAttribute('aria-label')}"`);
-					if (element.getAttribute('type')) attrs.push(`type="${element.getAttribute('type')}"`);
-					if (element.getAttribute('name')) attrs.push(`name="${element.getAttribute('name')}"`);
-					if (element.getAttribute('src')) {
-						const src = element.getAttribute('src');
-						attrs.push(`src="${src.substring(0, 50)}${src.length > 50 ? '...' : ''}"`);
-					}
+                    // Get additional useful attributes
+                    const attrs = [];
+                    if (element.getAttribute('role')) attrs.push(`role="${element.getAttribute('role')}"`);
+                    if (element.getAttribute('aria-label')) attrs.push(`aria-label="${element.getAttribute('aria-label')}"`);
+                    if (element.getAttribute('type')) attrs.push(`type="${element.getAttribute('type')}"`);
+                    if (element.getAttribute('name')) attrs.push(`name="${element.getAttribute('name')}"`);
+                    if (element.getAttribute('src')) {
+                        const src = element.getAttribute('src');
+                        attrs.push(`src="${src.substring(0, 50)}${src.length > 50 ? '...' : ''}"`);
+                    }
 
-					// Add element info
-					structure += `${indent}${tagName}${id}${classes}${attrs.length ? ' [' + attrs.join(', ') + ']' : ''}\\n`;
+                    // Add element info
+                    structure += `${indent}${tagName}${id}${classes}${attrs.length ? ' [' + attrs.join(', ') + ']' : ''}\\n`;
 
-					// Handle iframes specially
-					if (tagName === 'iframe') {
-						try {
-							const iframeDoc = element.contentDocument || element.contentWindow?.document;
-							if (iframeDoc) {
-								structure += `${indent}  [IFRAME CONTENT]:\\n`;
-								structure += getPageStructure(iframeDoc, depth + 2, maxDepth);
-							} else {
-								structure += `${indent}  [IFRAME: No access - likely cross-origin]\\n`;
-							}
-						} catch (e) {
-							structure += `${indent}  [IFRAME: Access denied - ${e.message}]\\n`;
-						}
-					}
-				}
+                    // Handle iframes specially
+                    if (tagName === 'iframe') {
+                        try {
+                            const iframeDoc = element.contentDocument || element.contentWindow?.document;
+                            if (iframeDoc) {
+                                structure += `${indent}  [IFRAME CONTENT]:\\n`;
+                                structure += getPageStructure(iframeDoc, depth + 2, maxDepth);
+                            } else {
+                                structure += `${indent}  [IFRAME: No access - likely cross-origin]\\n`;
+                            }
+                        } catch (e) {
+                            structure += `${indent}  [IFRAME: Access denied - ${e.message}]\\n`;
+                        }
+                    }
+                }
 
-				// Get all child elements
-				const children = element.children || element.childNodes;
-				for (const child of children) {
-					if (child.nodeType === 1) { // Element nodes only
-						structure += getPageStructure(child, depth + 1, maxDepth);
-					}
-				}
+                // Get all child elements
+                const children = element.children || element.childNodes;
+                for (const child of children) {
+                    if (child.nodeType === 1) { // Element nodes only
+                        structure += getPageStructure(child, depth + 1, maxDepth);
+                    }
+                }
 
-				return structure;
-			}
+                return structure;
+            }
 
-			return getPageStructure();
-		})()"""
+            return getPageStructure();
+        })()"""
 
         page = await self.get_agent_current_page()
         structure = await page.evaluate(debug_script)
@@ -1406,9 +1651,10 @@ class BrowserContext:
         """
         page = await self.get_agent_current_page()
 
-        # We no longer force tabs to the foreground as it disrupts user focus
+        # We no longer force tabs to the foreground  it disrupts user focus
         # await page.bring_to_front()
-        await page.wait_for_load_state()
+
+        await self.animator.stop_all_animations()
 
         # stop the simulator - with error handling
         # await self.simulator.stop_simulation()
@@ -1419,8 +1665,9 @@ class BrowserContext:
             caret="initial",
         )
 
-        asyncio.create_task(self.simulator.screenshot(sound_effect=True))
-        
+        asyncio.create_task(self.animator.run_animation())
+        asyncio.create_task(self.animator.run_screenshot_animation())
+
         screenshot_b64 = base64.b64encode(screenshot).decode("utf-8")
 
         # await self.remove_highlights()
@@ -1437,22 +1684,22 @@ class BrowserContext:
             page = await self.get_agent_current_page()
             await page.evaluate(
                 """
-				try {
-					// Remove the highlight container and all its contents
-					const container = document.getElementById('playwright-highlight-container');
-					if (container) {
-						container.remove();
-					}
+                try {
+                    // Remove the highlight container and all its contents
+                    const container = document.getElementById('playwright-highlight-container');
+                    if (container) {
+                        container.remove();
+                    }
 
-					// Remove highlight attributes from elements
-					const highlightedElements = document.querySelectorAll('[browser-user-highlight-id^="playwright-highlight-"]');
-					highlightedElements.forEach(el => {
-						el.removeAttribute('browser-user-highlight-id');
-					});
-				} catch (e) {
-					console.error('Failed to remove highlights:', e);
-				}
-				"""
+                    // Remove highlight attributes from elements
+                    const highlightedElements = document.querySelectorAll('[browser-user-highlight-id^="playwright-highlight-"]');
+                    highlightedElements.forEach(el => {
+                        el.removeAttribute('browser-user-highlight-id');
+                    });
+                } catch (e) {
+                    console.error('Failed to remove highlights:', e);
+                }
+                """
             )
         except Exception as e:
             logger.debug(
@@ -1795,8 +2042,8 @@ class BrowserContext:
         Input text into an element with proper error handling and state management.
         Handles different types of input fields and ensures proper element state before input.
         """
-        asyncio.create_task(self.simulator.type(element_node=element_node))
-        
+        asyncio.create_task(self.animator.type(element_node=element_node))
+
         try:
             element_handle = await self.get_locate_element(element_node)
 
@@ -1812,20 +2059,20 @@ class BrowserContext:
                     await element_handle.scroll_into_view_if_needed(timeout=1000)
             except Exception:
                 pass
-            
+
             try:
                 await element_handle.click()
             except Exception:
                 raise BrowserError("Failed to click to focus the element.")
-            
-            try: 
+
+            try:
                 page = await self.get_agent_current_page()
                 await page.keyboard.type(text)
             except Exception as e:
                 raise BrowserError(
                     f"Failed to type text into element: {element_node.get_description()}. Error: {str(e)}"
                 )
-                
+
         except Exception as e:
             raise BrowserError(e)
 
@@ -1834,8 +2081,8 @@ class BrowserContext:
         """
         Optimized method to click an element using xpath.
         """
-        asyncio.create_task(self.simulator.click(element_node=element_node))
-        
+        asyncio.create_task(self.animator.click(element_node=element_node))
+
         page = await self.get_agent_current_page()
 
         try:
@@ -1884,7 +2131,7 @@ class BrowserContext:
                     await self._check_and_handle_navigation(page)
 
             try:
-                return await perform_click(lambda: element_handle.click(timeout=1500))
+                return await perform_click(lambda: element_handle.click(timeout=200))
             except URLNotAllowedError as e:
                 raise e
             except Exception:
@@ -2082,30 +2329,30 @@ class BrowserContext:
 
         # An element can *really* scroll if: overflow-y is auto|scroll|overlay, it has more content than fits, its own viewport is not a postage stamp (more than 50 % of window).
         SMART_SCROLL_JS = """(dy) => {
-			const bigEnough = el => el.clientHeight >= window.innerHeight * 0.5;
-			const canScroll = el =>
-				el &&
-				/(auto|scroll|overlay)/.test(getComputedStyle(el).overflowY) &&
-				el.scrollHeight > el.clientHeight &&
-				bigEnough(el);
+            const bigEnough = el => el.clientHeight >= window.innerHeight * 0.5;
+            const canScroll = el =>
+                el &&
+                /(auto|scroll|overlay)/.test(getComputedStyle(el).overflowY) &&
+                el.scrollHeight > el.clientHeight &&
+                bigEnough(el);
 
-			let el = document.activeElement;
-			while (el && !canScroll(el) && el !== document.body) el = el.parentElement;
+            let el = document.activeElement;
+            while (el && !canScroll(el) && el !== document.body) el = el.parentElement;
 
-			el = canScroll(el)
-					? el
-					: [...document.querySelectorAll('*')].find(canScroll)
-					|| document.scrollingElement
-					|| document.documentElement;
+            el = canScroll(el)
+                    ? el
+                    : [...document.querySelectorAll('*')].find(canScroll)
+                    || document.scrollingElement
+                    || document.documentElement;
 
-			if (el === document.scrollingElement ||
-				el === document.documentElement ||
-				el === document.body) {
-				window.scrollBy(0, dy);
-			} else {
-				el.scrollBy({ top: dy, behavior: 'auto' });
-			}
-		}"""
+            if (el === document.scrollingElement ||
+                el === document.documentElement ||
+                el === document.body) {
+                window.scrollBy(0, dy);
+            } else {
+                el.scrollBy({ top: dy, behavior: 'auto' });
+            }
+        }"""
         await page.evaluate(SMART_SCROLL_JS, pixels)
 
     async def reset_context(self):
@@ -2197,10 +2444,10 @@ class BrowserContext:
                 try:
                     await page.evaluate(
                         """
-						(width, height) => {
-							window.resizeTo(width, height);
-						}
-						""",
+                        (width, height) => {
+                            window.resizeTo(width, height);
+                        }
+                        """,
                         window_size["width"],
                         window_size["height"] + BROWSER_NAVBAR_HEIGHT,
                     )
