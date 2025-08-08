@@ -1252,13 +1252,13 @@ class BrowserContext:
 
         # Wait for page load
         try:
-            # await self._wait_for_stable_network()
+            await self._wait_for_stable_network()
 
             # Check if the loaded URL is allowed
             page = await self.get_agent_current_page()
 
             # FIXME: figure out if we need this here.
-            await page.wait_for_load_state()
+            # await page.wait_for_load_state()
             await self._check_and_handle_navigation(page)
 
             # wait for DOM to stabilize (especially important for JavaScript-heavy sites)
@@ -1585,6 +1585,7 @@ class BrowserContext:
         try:
             await self.remove_highlights()
             dom_service = DomService(page)
+            
             content = await dom_service.get_clickable_elements(
                 focus_element=focus_element,
                 viewport_expansion=self.config.viewport_expansion,
@@ -2259,6 +2260,8 @@ class BrowserContext:
         return element_handle
 
     async def get_dom_element_by_index(self, index: int) -> DOMElementNode:
+        if not index:
+            return None
         selector_map = await self.get_selector_map()
         return selector_map[index]
 
@@ -2280,6 +2283,54 @@ class BrowserContext:
                     await f.write(json.dumps(cookies))
             except Exception as e:
                 logger.warning(f"❌  Failed to save cookies: {str(e)}")
+                
+    
+    async def is_text_field_focused(self, page: "Page") -> bool:
+        """
+        Checks if a text field element is currently focused in the browser.
+
+        This uses document.activeElement and checks if the element is a text input field
+        like input[type="text"], textarea, contenteditable, or other editable fields.
+
+        Args:
+            page: The current Playwright page to check
+
+        Returns:
+            bool: True if a text field is focused, False otherwise
+        """
+        if not page:
+            return False
+
+        try:
+            # Execute JavaScript to check if a text field is focused
+            is_focused = await page.evaluate(
+                """() => {
+                const active = document.activeElement;
+                if (!active) return false;
+                
+                // Check if it's an input field that accepts text
+                if (active.tagName === 'INPUT') {
+                    const type = active.getAttribute('type') || 'text';
+                    return ['text', 'email', 'password', 'search', 'tel', 'url', 'number'].includes(type.toLowerCase());
+                }
+                
+                // Check if it's a textarea
+                if (active.tagName === 'TEXTAREA') return true;
+                
+                // Check if it's contenteditable
+                if (active.getAttribute('contenteditable') === 'true') return true;
+                
+                // Check for rich text editors with design mode
+                if (document.designMode === 'on') return true;
+                
+                return false;
+            }"""
+            )
+
+            return bool(is_focused)
+        except Exception as e:
+            logger.error(f"Error checking if text field is focused: {e}")
+            return False
 
     async def is_file_uploader(
         self, element_node: DOMElementNode, max_depth: int = 3, current_depth: int = 0
