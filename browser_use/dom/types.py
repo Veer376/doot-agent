@@ -178,8 +178,145 @@ class DOMElementNode(DOMBaseNode):
         collect_text(self, 0)
         return "\n".join(text_parts).strip()
     
-    
+    # In your dom/types.py file, add this new method to the DOMElementNode class
+
+# ... (inside the DOMElementNode class) ...
+    def get_simplified_dom_text(self) -> str:
+        """
+        Recursively converts the DOM tree into a simplified, indented text
+        format that is lightweight and contextually rich for an LLM.
+        """
+        # These are the attributes we want to show the LLM.
+        # We prioritize semantic attributes over styling.
+        attrs_to_keep = [
+            'id', 'class', 'role', 'aria-label', 'placeholder', 
+            'alt', 'for', 'name', 'title', 'type', 'href'
+        ]
         
+        # A list to hold the lines of the final text output.
+        simplified_lines = []
+    
+        def process_node(node: DOMBaseNode, depth: int) -> None:
+            indent = "  " * depth  # Indentation for hierarchy
+    
+            if isinstance(node, DOMTextNode):
+                # Only include non-empty, visible text nodes.
+                text = node.text.strip()
+                if text and node.is_visible:
+                    simplified_lines.append(f'{indent}"{text}"')
+                return
+    
+            if isinstance(node, DOMElementNode):
+                # --- Build the opening tag with important attributes ---
+                attr_parts = []
+                
+                # Add the special clickable element ID if it exists.
+                if node.highlight_index is not None:
+                    attr_parts.append(f'id="[{node.highlight_index}]"')
+    
+                for attr, value in node.attributes.items():
+                    # Ensure value is a string and not empty
+                    if attr in attrs_to_keep and isinstance(value, str) and value:
+                        # Clean up long class lists for brevity
+                        if attr == 'class' and len(value) > 50:
+                            value = ' '.join(value.split()[:5]) + '...'
+                        attr_parts.append(f'{attr}="{value}"')
+    
+                attr_str = " ".join(attr_parts)
+                simplified_lines.append(f"{indent}<{node.tag_name} {attr_str}>")
+    
+                # --- Recursively process all child nodes ---
+                for child in node.children:
+                    process_node(child, depth + 1)
+                
+                simplified_lines.append(f"{indent}</{node.tag_name}>")
+    
+        # Start the process from the root node (self).
+        process_node(self, 0)
+        return "\n".join(simplified_lines)
+    
+    def get_contextual_dom_text(
+        self,
+        ancestor_levels: int = 1, # How many levels to go up
+        sibling_count: int = 0   # How many siblings to include on each side
+    ) -> str:
+        """
+        Creates a rich, contextual, simplified DOM text snippet around a target element.
+
+        This function implements the "vertical slice" strategy:
+        1. Finds the target element by its index.
+        2. Traverses UP the DOM tree by `ancestor_levels`.
+        3. From that ancestor, it reconstructs a partial tree that includes:
+            - The ancestor itself.
+            - A few of the ancestor's siblings (`sibling_count`).
+            - The full hierarchy back DOWN to the original target element.
+
+        This provides a highly focused yet contextually rich snippet for the helper LLM.
+
+        Args:
+            target_index: The highlight_index of the example element.
+            selector_map: The map of highlight_index to DOMElementNode.
+            ancestor_levels: The number of parent levels to traverse upwards.
+            sibling_count: The number of siblings to include on each side of the ancestor.
+
+        Returns:
+            A string containing the simplified text representation of the rich snippet.
+        """
+
+        # 1. Traverse UP to find the main ancestor
+        ancestor = self
+        for _ in range(ancestor_levels):
+            if ancestor.parent:
+                ancestor = ancestor.parent
+            else:
+                break # Stop if we reach the top of the tree
+
+        # 2. Get the parent of the final ancestor to find its siblings
+        top_level_parent = ancestor.parent
+        if not top_level_parent:
+            # If the ancestor is the root, just render the whole tree from there
+            return ancestor.get_simplified_dom_text()
+
+        # 3. Create a new root for our snippet (the "grandparent")
+        snippet_root = DOMElementNode(
+            tag_name=top_level_parent.tag_name,
+            attributes=top_level_parent.attributes,
+            children=[],
+            xpath=top_level_parent.xpath,
+            is_visible=top_level_parent.is_visible,
+            parent=None
+        )
+
+        # 4. Find the ancestor's position among its siblings
+        try:
+            ancestor_index = top_level_parent.children.index(ancestor)
+        except ValueError:
+            # Fallback if something is wrong with the tree structure
+            return ancestor.get_simplified_dom_text()
+
+        # 5. Add the ancestor and its immediate siblings to the snippet
+        start = max(0, ancestor_index - sibling_count)
+        end = min(len(top_level_parent.children), ancestor_index + sibling_count + 1)
+
+        for i in range(start, end):
+            sibling = top_level_parent.children[i]
+            # We only need the full detail for the branch containing our target
+            if sibling is ancestor:
+                snippet_root.children.append(ancestor)
+            else:
+                # For other siblings, we can create a simplified "stub" to save tokens
+                stub_sibling = DOMElementNode(
+                    tag_name=sibling.tag_name,
+                    attributes=sibling.attributes,
+                    children=[], # Don't include children of siblings
+                    xpath=sibling.xpath,
+                    is_visible=sibling.is_visible,
+                    parent=snippet_root
+                )
+                snippet_root.children.append(stub_sibling)
+
+        return snippet_root.get_simplified_dom_text()
+   
     @time_execution_sync("--clickable_elements_to_string")
     def clickable_elements_to_string(
         self, include_attributes: list[str] | None = None
