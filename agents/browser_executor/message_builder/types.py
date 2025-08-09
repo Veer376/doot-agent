@@ -52,15 +52,15 @@ class MessagePlan(MessagePlanBase, BaseModel):
 
         if self.task:
             user_parts.append(types.Part(text=f"Task: {self.task}"))
-
-        if self.browser_state_text:
-            user_parts.append(types.Part(text=f"Browser: {self.browser_state_text}"))
-
+            
         if self.browser_state_image:
             image_bytes = base64.b64decode(self.browser_state_image)
             user_parts.append(types.Part(
                 inline_data=types.Blob(mime_type="image/jpeg", data=image_bytes)
             ))
+        
+        if self.browser_state_text:
+            user_parts.append(types.Part(text=f"Browser: {self.browser_state_text}"))
 
         if self.dynamic_instructions:
             user_parts.append(types.Part(text=self.dynamic_instructions))
@@ -86,46 +86,24 @@ class MessagePlan(MessagePlanBase, BaseModel):
             
              
         # CHAIN OF THOUGHT
+        
         ai_message = self.ai_message
         ai_message: GeminiMessage
         
-        thought = ai_message.thought if hasattr(ai_message, "thought") else None
-        thought_signatures = ai_message.thought_signatures if hasattr(ai_message, "thought_signatures") else {}
-        function_calls = ai_message.tool_calls if hasattr(ai_message, "tool_calls") else []
-        content = ai_message.content if hasattr(ai_message, "content") else ""
+        model_parts: list[types.Part] = []
         
-        model_parts = []
+        parts: types.Part = ai_message.parts if hasattr(ai_message, "parts") else []
         
-        # Thought
-        # if thought:
-        #     model_parts.append(types.Part(text=thought, thought=True)) NOTE: Skipping thought for saving tokens.
+        if not parts:
+            logger.warning("No parts found in AIMessage. This may lead to empty Gemini content.")
+            
+        for part in parts:
+            if hasattr(part, "thought"):
+                thought = part.text
+                continue # NOTE: skipping the thought for saving tokens. OR we could have just included all the parts.
+            else:
+                model_parts.append(part)
 
-        # Content
-        if content:
-            model_parts.append(types.Part(text=content))
-
-        # Function Calls
-        for function_call in function_calls:
-            function_call: ToolCall
-        
-            id = function_call.get("id", None)
-            
-            if id is None:
-                raise ValueError("ID if missing for function call")
-            
-            part_kwargs = {
-                "function_call": types.FunctionCall(
-                    id=id,
-                    name=function_call.get("name", "unknown_tool"),
-                    args=function_call.get("args", {}), # NOTE : remove args to save tokens.
-                )
-            }
-            if id in thought_signatures:
-                part_kwargs["thought_signature"] = thought_signatures[id]
-            
-            model_parts.append(types.Part(**part_kwargs))
-        
-        
         if user_parts:
             contents.append(types.Content(role="user", parts=user_parts))
             

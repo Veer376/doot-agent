@@ -41,7 +41,7 @@ class LLM:
 
     @abstractmethod
     async def __call__(
-        self, message_plan: MessagePlanBase, tools: list[Callable], config: LLMConfig
+        self, message_plan: MessagePlanBase, tools: list[Callable]|None=None, config: LLMConfig|None=None
     ) -> AIMessage:
         """Call the LLM with the given tools and message plan."""
         pass
@@ -51,8 +51,7 @@ class GeminiMessage(AIMessage):
     """Extended AIMessage with gemini attributes."""
 
     thought: str | None
-    thought_signatures: dict[str, bytes] = {}
-
+    part: list[types.Part] = []
 
 class LLMUsageStats:
 

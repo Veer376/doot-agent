@@ -30,10 +30,10 @@ class GeminiLLM(LLM):
         self.client = genai.Client(api_key=api_key)
 
     async def __call__(
-        self, message_plan: MessagePlanBase, tools: list[Callable]=[], config: LLMConfig | None = None
+        self, message_plan: MessagePlanBase, tools: list[Callable]|None = None, config: LLMConfig | None = None
     ) -> GeminiMessage:
         """Get response from Gemini API and convert it to GeminiMessage format."""
-        
+
         from langchain_core.tools import InjectedToolArg
         processed_tools = []
         for tool in tools if tools else []:
@@ -56,8 +56,7 @@ class GeminiLLM(LLM):
             config=types.GenerateContentConfig(
                 system_instruction=system_instructions,
                 tools=processed_tools,
-                # TODO: tinker(to try to repair or improve something without having the proper skill or knowledge) with model_selection_config if needed
-                temperature=0.6,
+                temperature=0.4,
                 automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
                 thinking_config=types.ThinkingConfig(
                     include_thoughts=True,
@@ -67,53 +66,51 @@ class GeminiLLM(LLM):
                 ),
             )
         )
-        
-        print(f"Response from Gemini: {response}")
-        
+                
         # Track usage statistics
         usage_stats = get_usage_stats()
         if response and response.usage_metadata:
             usage_stats.update_from_gemini(self.model_name, response.usage_metadata)
-        
-        text = ""
-        tool_calls = []
-        thought = ""
-        thought_signatures = {}
-        
+            
+        text: str = ""
+        tool_calls: list[ToolCall] = []
+        thought: str = ""
+        parts: list[types.Part] = []
+                
         if response and response.candidates:
             content = response.candidates[0].content
             for part in getattr(content, "parts", []):
+                part: types.Part
+                parts.append(part)
+                
                 if getattr(part, "thought", False) and hasattr(part, "text") and part.text:
                     thought = part.text
         
                 elif hasattr(part, "function_call") and part.function_call:
-                    tool_id = part.function_call.id or str(uuid.uuid4())
+                    id = part.function_call.id or str(uuid.uuid4())
+                    
+                    # Assigning the ID to the function_call as well.
+                    part.function_call.id = id
+                    print(f"Function call ID assigned: {part.function_call.id}")
                     tool_call = ToolCall(
                         name=part.function_call.name,
                         args=part.function_call.args,
-                        id=tool_id,
+                        id=part.function_call.id,
                     )
-
-                    if hasattr(part, "thought_signature") and part.thought_signature:
-                        thought_signatures[tool_id] = part.thought_signature
-            
                     tool_calls.append(tool_call)
         
                 elif hasattr(part, "text") and part.text:
                     text = part.text
-                    
-        
+                                    
+                
         message = GeminiMessage(
             content=text,
             tool_calls=tool_calls,  # If tool_calls is empty, it's still a valid empty list
             thought=thought,
-            thought_signatures=thought_signatures
+            parts=parts,
         )
 
         return message
-    
-    
-    
     
     
     def strip_injected_args(self, func, injected_type):
