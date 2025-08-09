@@ -6,22 +6,22 @@ if TYPE_CHECKING:
     from .dom.types import DOMElementNode
 
 
-class Simulator:
+class Animator:
     """
-    Manages the injection and execution of browser animations for a specific page.
-    This class encapsulates the Python methods to trigger animations and the
+    Manages the injection and execution of browser animators for a specific page.
+    This class encapsulates the Python methods to trigger animators and the
     underlying JavaScript code that creates the visual effects.
     """
 
     def __init__(self, page: Optional["Page"]):
         """
-        Initializes the Simulator with a Playwright Page object.
+        Initializes the Animator with a Playwright Page object.
         The page object is optional during instantiation but required for execution.
         """
         self.page = page
 
         # script
-        self.simulator_script = """
+        self.animator_script = """
         (() => {
             // Setup styles and cursor
             if (window.playwrightAnimationsSetup) return;
@@ -107,14 +107,25 @@ class Simulator:
                 .mock-close-btn.green { background: #22c55e; }
                 
                 .mock-content { padding: 8px; height: calc(100% - 20px); background: transparent; position: relative; }
-                .mock-profile { position: absolute; top: 6px; left: 8px; width: 16px; height: 16px; background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 8px; font-weight: bold; border: 1px solid #9ca3af; }
-                .mock-profile::before { content: ""; width: 8px; height: 8px; background: #d1d5db; border-radius: 50%; position: relative; }
-                .mock-profile::after { content: ""; position: absolute; bottom: 2px; width: 10px; height: 6px; background: #d1d5db; border-radius: 0 0 8px 8px; }
+                
+                .mock-profile {
+                    position: absolute;
+                    top: 4px;
+                    left: 6px;
+                    width: 18px;
+                    height: 18px;
+                    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2'%3E%3C/path%3E%3Ccircle cx='12' cy='7' r='4'%3E%3C/circle%3E%3C/svg%3E");
+                    background-size: 70%;
+                    background-position: center;
+                    background-repeat: no-repeat;
+                    border: 1.5px solid #6b7280;
+                    border-radius: 50%;
+                }
                 
                 .mock-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 24px; height: calc(100% - 32px); }
                 
                 .mock-card {
-                    background: rgba(255, 255, 255, 0.2);
+                    background: rgba(241, 245, 249, 0.4);
                     backdrop-filter: blur(5px);
                     -webkit-backdrop-filter: blur(5px);
                     border: 1px solid rgba(255, 255, 255, 0.2);
@@ -126,12 +137,12 @@ class Simulator:
 
                 .mock-image { 
                     width: 100%; 
-                    height: 23px; 
+                    height: 16px; 
                     background: transparent; 
                     border-radius: 4px; 
                     position: relative; 
                     overflow: hidden; 
-                    margin-bottom: 4px;
+                    margin-bottom: 8px;
                     border: none;
                 }
                 
@@ -193,23 +204,32 @@ class Simulator:
                 }
                 
                 .mock-lines { display: flex; flex-direction: column; gap: 2px; }
-                .mock-line { height: 2px; background: #cbd5e1; border-radius: 1px; }
-                .mock-line:nth-child(1) { width: 90%; }
-                .mock-line:nth-child(2) { width: 70%; }
-                .mock-line:nth-child(3) { width: 85%; }
-                
-                .mock-cursor { position: absolute; top: 0; left: 0; width: 15px; height: 15px; pointer-events: none; z-index: 20; }
-                .mock-cursor-icon { width: 100%; height: 100%; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 24 24'%3E%3Cpath fill='black' stroke='black' stroke-width='1.5' d='M5.5 3.21V20.8c0 .45.54.67.85.35l4.86-4.86a.5.5 0 0 1 .35-.15h6.87a.5.5 0 0 0 .35-.85L6.35 2.85a.5.5 0 0 0-.85.35Z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-size: contain; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.3)); transform-origin: top left; }
-                
-                @keyframes mock-cursor-sequence {
-                    0% { transform: translate(var(--start-x), var(--start-y)); opacity: 0; }
-                    20% { transform: translate(var(--start-x), var(--start-y)); opacity: 1; }
-                    80% { transform: translate(235px, 120px); }
-                    90% { transform: translate(235px, 120px) scale(0.7); }
-                    100% { transform: translate(235px, 120px) scale(1); opacity: 1; }
+                .mock-line { 
+                    height: 4px; 
+                    background: #cbd5e1; 
+                    border-radius: 2px;
+                    position: relative;
+                    overflow: hidden;
+                    background-color: #e2e8f0;
                 }
-                
-                .mock-cursor.animated { animation: mock-cursor-sequence 2s ease-in-out forwards; }
+                .mock-line::after {
+                    content: '';
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.5), transparent);
+                    animation: shimmer 1.5s infinite;
+                }
+                .mock-line:nth-child(1) { width: 90%; }
+                .mock-line:nth-child(2) { width: 70%; animation-delay: 0.2s; }
+                .mock-line:nth-child(3) { width: 85%; animation-delay: 0.4s; }
+
+                @keyframes shimmer {
+                    0% { transform: translateX(-100%); }
+                    100% { transform: translateX(100%); }
+                }
             `;
             const styleSheet = document.createElement("style");
             styleSheet.id = 'pointer-animation-styles';
@@ -230,34 +250,225 @@ class Simulator:
 
             window.playwrightAnimationsSetup = true;
             window.playwrightTimers = new Set();
+            window.screenshotTimers = new Set();
 
-            // Main animation function
-            window.run_animation = async (params) => {
-                const { coords, action = { type: 'click' }, text } = params;
+            window.stop_all_animations = () => {
+                window.playwrightTimers.forEach(timer => clearTimeout(timer));
+                window.playwrightTimers.clear();
+                window.screenshotTimers.forEach(timer => clearTimeout(timer));
+                window.screenshotTimers.clear();
+
+                document.querySelectorAll('#playwright-cursor, #screenshot-flash, #screenshot-thumbnail, .splash-line, .scroll-indicator').forEach(el => el.remove());
+                
+                // Re-create cursor for next run
+                const newCursor = document.createElement('div');
+                newCursor.id = 'playwright-cursor';
+                ['pointer', 'text', 'scroll', 'key', 'info', 'processing'].forEach(iconType => {
+                    const iconEl = document.createElement('div');
+                    iconEl.id = `playwright-cursor-${iconType}-icon`;
+                    iconEl.className = 'playwright-cursor-icon';
+                    newCursor.appendChild(iconEl);
+                });
+                newCursor.style.left = '-100px';
+                newCursor.style.top = '-100px';
+                document.body.appendChild(newCursor);
+            };
+            
+            // --- Screenshot Animation Function ---
+            window.run_screenshot_animation = async (params = {}) => {
+                const { sound_effect = false } = params;
+
+                // Clear only screenshot timers
+                window.screenshotTimers.forEach(timer => clearTimeout(timer));
+                window.screenshotTimers.clear();
+                document.querySelectorAll('#screenshot-flash, #screenshot-thumbnail').forEach(el => el.remove());
+
+                const flashElement = document.createElement('div');
+                flashElement.id = 'screenshot-flash';
+                document.body.appendChild(flashElement);
+
+                const thumbnailElement = document.createElement('div');
+                thumbnailElement.id = 'screenshot-thumbnail';
+                
+                // Create elements programmatically instead of using innerHTML to avoid TrustedHTML issues
+                const mockBrowser = document.createElement('div');
+                mockBrowser.className = 'mock-browser';
+                
+                const mockBrowserHeader = document.createElement('div');
+                mockBrowserHeader.className = 'mock-browser-header';
+                
+                const mockCloseButtons = document.createElement('div');
+                mockCloseButtons.className = 'mock-close-buttons';
+                
+                const mockRedBtn = document.createElement('div');
+                mockRedBtn.className = 'mock-close-btn red';
+                
+                const mockYellowBtn = document.createElement('div');
+                mockYellowBtn.className = 'mock-close-btn yellow';
+                
+                const mockGreenBtn = document.createElement('div');
+                mockGreenBtn.className = 'mock-close-btn green';
+                
+                const mockUrlBar = document.createElement('div');
+                mockUrlBar.className = 'mock-url-bar';
+                
+                // Assemble header
+                mockCloseButtons.appendChild(mockRedBtn);
+                mockCloseButtons.appendChild(mockYellowBtn);
+                mockCloseButtons.appendChild(mockGreenBtn);
+                mockBrowserHeader.appendChild(mockCloseButtons);
+                mockBrowserHeader.appendChild(mockUrlBar);
+                
+                // Create content
+                const mockContent = document.createElement('div');
+                mockContent.className = 'mock-content';
+                
+                const mockProfile = document.createElement('div');
+                mockProfile.className = 'mock-profile';
+                
+                const mockGrid = document.createElement('div');
+                mockGrid.className = 'mock-grid';
+                
+                // Create first card
+                const mockCard1 = document.createElement('div');
+                mockCard1.className = 'mock-card';
+                
+                const mockImage1 = document.createElement('div');
+                mockImage1.className = 'mock-image';
+                
+                const mockCloud1 = document.createElement('div');
+                mockCloud1.className = 'mock-cloud';
+                
+                const mockLines1 = document.createElement('div');
+                mockLines1.className = 'mock-lines';
+                
+                for (let i = 0; i < 3; i++) {
+                    const mockLine = document.createElement('div');
+                    mockLine.className = 'mock-line';
+                    mockLines1.appendChild(mockLine);
+                }
+                
+                // Assemble first card
+                mockImage1.appendChild(mockCloud1);
+                mockCard1.appendChild(mockImage1);
+                mockCard1.appendChild(mockLines1);
+                
+                // Create second card (duplicate of first)
+                const mockCard2 = document.createElement('div');
+                mockCard2.className = 'mock-card';
+                
+                const mockImage2 = document.createElement('div');
+                mockImage2.className = 'mock-image';
+                
+                const mockCloud2 = document.createElement('div');
+                mockCloud2.className = 'mock-cloud';
+                
+                const mockLines2 = document.createElement('div');
+                mockLines2.className = 'mock-lines';
+                
+                for (let i = 0; i < 3; i++) {
+                    const mockLine = document.createElement('div');
+                    mockLine.className = 'mock-line';
+                    mockLines2.appendChild(mockLine);
+                }
+                
+                // Assemble second card
+                mockImage2.appendChild(mockCloud2);
+                mockCard2.appendChild(mockImage2);
+                mockCard2.appendChild(mockLines2);
+                
+                // Add cards to grid
+                mockGrid.appendChild(mockCard1);
+                mockGrid.appendChild(mockCard2);
+                
+                // Create capture button
+                const mockCaptureButton = document.createElement('div');
+                mockCaptureButton.id = 'mock-capture-button';
+                mockCaptureButton.className = 'glass-card';
+                mockCaptureButton.textContent = 'Captured';
+                
+                // Assemble content
+                mockContent.appendChild(mockProfile);
+                mockContent.appendChild(mockGrid);
+                mockContent.appendChild(mockCaptureButton);
+                
+                // Assemble browser
+                mockBrowser.appendChild(mockBrowserHeader);
+                mockBrowser.appendChild(mockContent);
+                
+                // Add to thumbnail
+                thumbnailElement.appendChild(mockBrowser);
+                
+                document.body.appendChild(thumbnailElement);
+
+                if (sound_effect && window.Tone) {
+                    try {
+                        const shutterSound = new Tone.NoiseSynth({
+                            noise: { type: 'white' },
+                            envelope: { attack: 0.001, decay: 0.05, sustain: 0, release: 0.1 }
+                        }).toDestination();
+                        await Tone.start();
+                        shutterSound.triggerAttackRelease("0.05");
+                    } catch (e) {
+                        console.error("Tone.js error:", e);
+                    }
+                }
+
+                flashElement.classList.add('active');
+                const timer1 = setTimeout(() => flashElement.remove(), 300);
+                const timer2 = setTimeout(() => { 
+                    thumbnailElement.classList.add('visible'); 
+                }, 100);
+                const timer3 = setTimeout(() => {
+                    thumbnailElement.classList.add('shrink');
+                    const timer4 = setTimeout(() => thumbnailElement.remove(), 500);
+                    window.screenshotTimers.add(timer4);
+                }, 3500);
+
+                window.screenshotTimers.add(timer1);
+                window.screenshotTimers.add(timer2);
+                window.screenshotTimers.add(timer3);
+            };
+
+            // --- Main Cursor Animation Function ---
+            window.run_animation = async (params = {}) => {
+                const { coords, action = {}, text } = params;
                 const { type, direction } = action;
 
-                // Comprehensive cleanup & timer fix
-                if (window.playwrightTimers) {
-                    window.playwrightTimers.forEach(timer => clearTimeout(timer)); // Works for intervals too
-                    window.playwrightTimers.clear();
-                }
-
-                document.querySelectorAll('#playwright-cursor-textbox, .scroll-indicator, .splash-line').forEach(el => el.remove());
+                // Clear only main cursor timers
+                window.playwrightTimers.forEach(timer => clearTimeout(timer));
+                window.playwrightTimers.clear();
+                document.querySelectorAll('#playwright-cursor-textbox, .splash-line, .scroll-indicator').forEach(el => el.remove());
 
                 const cursor = document.getElementById('playwright-cursor');
-                if (!cursor) { console.error("Cursor animation setup has not been run."); return; }
+                if (!cursor) { console.error("Cursor element not found."); return; }
 
                 document.querySelectorAll('.playwright-cursor-icon').forEach(icon => icon.style.display = 'none');
-                if (type !== 'screenshot') {
-                     const activeIcon = document.getElementById(`playwright-cursor-${type}-icon`) || document.getElementById('playwright-cursor-pointer-icon');
-                     activeIcon.style.display = 'block';
+                const activeIcon = document.getElementById(`playwright-cursor-${type}-icon`) || document.getElementById('playwright-cursor-pointer-icon');
+                if (activeIcon) activeIcon.style.display = 'block';
+
+                let endX, endY;
+
+                if (coords) {
+                    endX = coords.x;
+                    endY = coords.y;
+                } else {
+                    const currentX = parseFloat(cursor.style.left);
+                    // Check if the cursor has a valid, non-initial position
+                    if (currentX > 0) {
+                        endX = currentX;
+                        endY = parseFloat(cursor.style.top);
+                    } else {
+                        // Default to center if no last position is known
+                        endX = window.innerWidth / 2;
+                        endY = window.innerHeight / 2;
+                    }
                 }
 
-                const endX = coords ? coords.x : parseFloat(cursor.style.left);
-                const endY = coords ? coords.y : parseFloat(cursor.style.top);
 
                 function typeText(textBox, fullText, callback) {
-                    textBox.innerHTML = fullText;
+                    // Set text content instead of innerHTML to avoid TrustedHTML issues
+                    textBox.textContent = fullText;
                     textBox.classList.add('textbox-appear');
                     if (callback) {
                         const timer = setTimeout(callback, 300);
@@ -266,6 +477,8 @@ class Simulator:
                 }
 
                 async function triggerActionAnimations() {
+                    if (!type) return; // Do nothing if no action type is specified
+
                     if (type === 'click') {
                         cursor.classList.add('cursor-click-down');
                         const timer1 = setTimeout(() => cursor.classList.remove('cursor-click-down'), 200);
@@ -298,100 +511,50 @@ class Simulator:
                         indicator.style.left = `${endX}px`;
                         indicator.style.top = `${endY}px`;
                         indicator.style.animation = `scroll-${direction} 0.4s ease-out forwards`;
-                        if (direction === 'down') indicator.innerHTML = `<svg width="10" height="30" viewBox="0 0 10 30"><line x1="5" y1="0" x2="5" y2="20" stroke="rgba(0,0,0,0.4)" stroke-width="4" stroke-linecap="round"/><path d="M0 20 L5 30 L10 20 Z" fill="rgba(0,0,0,0.4)"/></svg>`;
-                        else if (direction === 'up') indicator.innerHTML = `<svg width="10" height="30" viewBox="0 0 10 30"><path d="M0 10 L5 0 L10 10 Z" fill="rgba(0,0,0,0.4)"/><line x1="5" y1="10" x2="5" y2="30" stroke="rgba(0,0,0,0.4)" stroke-width="4" stroke-linecap="round"/></svg>`;
+                        // Create SVG programmatically instead of using innerHTML
+                        const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+                        svg.setAttribute("width", "10");
+                        svg.setAttribute("height", "30");
+                        svg.setAttribute("viewBox", "0 0 10 30");
+                        
+                        if (direction === 'down') {
+                            const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+                            line.setAttribute("x1", "5");
+                            line.setAttribute("y1", "0");
+                            line.setAttribute("x2", "5");
+                            line.setAttribute("y2", "20");
+                            line.setAttribute("stroke", "rgba(0,0,0,0.4)");
+                            line.setAttribute("stroke-width", "4");
+                            line.setAttribute("stroke-linecap", "round");
+                            
+                            const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                            path.setAttribute("d", "M0 20 L5 30 L10 20 Z");
+                            path.setAttribute("fill", "rgba(0,0,0,0.4)");
+                            
+                            svg.appendChild(line);
+                            svg.appendChild(path);
+                        } else if (direction === 'up') {
+                            const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                            path.setAttribute("d", "M0 10 L5 0 L10 10 Z");
+                            path.setAttribute("fill", "rgba(0,0,0,0.4)");
+                            
+                            const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+                            line.setAttribute("x1", "5");
+                            line.setAttribute("y1", "10");
+                            line.setAttribute("x2", "5");
+                            line.setAttribute("y2", "30");
+                            line.setAttribute("stroke", "rgba(0,0,0,0.4)");
+                            line.setAttribute("stroke-width", "4");
+                            line.setAttribute("stroke-linecap", "round");
+                            
+                            svg.appendChild(path);
+                            svg.appendChild(line);
+                        }
+                        
+                        indicator.appendChild(svg);
                         document.body.appendChild(indicator);
                         const timer = setTimeout(() => indicator.remove(), 400);
                         window.playwrightTimers.add(timer);
-                    } else if (type === 'screenshot') {
-                        document.querySelectorAll('#screenshot-flash, #screenshot-thumbnail').forEach(el => el.remove());
-
-                        const flashElement = document.createElement('div');
-                        flashElement.id = 'screenshot-flash';
-                        document.body.appendChild(flashElement);
-
-                        const thumbnailElement = document.createElement('div');
-                        thumbnailElement.id = 'screenshot-thumbnail';
-                        
-                        // Create mock browser interface
-                        thumbnailElement.innerHTML = `
-                            <div class="mock-browser">
-                                <div class="mock-browser-header">
-                                    <div class="mock-close-buttons">
-                                        <div class="mock-close-btn red"></div>
-                                        <div class="mock-close-btn yellow"></div>
-                                        <div class="mock-close-btn green"></div>
-                                    </div>
-                                    <div class="mock-url-bar"></div>
-                                </div>
-                                <div class="mock-content">
-                                    <div class="mock-profile"></div>
-                                    <div class="mock-grid">
-                                        <div class="mock-card">
-                                            <div class="mock-image">
-                                                <div class="mock-cloud"></div>
-                                            </div>
-                                            <div class="mock-lines">
-                                                <div class="mock-line"></div>
-                                                <div class="mock-line"></div>
-                                                <div class="mock-line"></div>
-                                            </div>
-                                        </div>
-                                        <div class="mock-card">
-                                            <div class="mock-image">
-                                                <div class="mock-cloud"></div>
-                                            </div>
-                                            <div class="mock-lines">
-                                                <div class="mock-line"></div>
-                                                <div class="mock-line"></div>
-                                                <div class="mock-line"></div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div id="mock-capture-button" class="glass-card">Capture</div>
-                                    <div class="mock-cursor animated">
-                                        <div class="mock-cursor-icon"></div>
-                                    </div>
-                                </div>
-                            </div>
-                        `;
-                        
-                        document.body.appendChild(thumbnailElement);
-
-                        const mockCursor = thumbnailElement.querySelector('.mock-cursor');
-                        const startX = `${Math.random() * 100}px`;
-                        const startY = `${Math.random() * 50 + 20}px`;
-                        mockCursor.style.setProperty('--start-x', startX);
-                        mockCursor.style.setProperty('--start-y', startY);
-
-
-                        if (action.sound_effect && window.Tone) {
-                            try {
-                                const shutterSound = new Tone.NoiseSynth({
-                                    noise: { type: 'white' },
-                                    envelope: { attack: 0.001, decay: 0.05, sustain: 0, release: 0.1 }
-                                }).toDestination();
-                                await Tone.start();
-                                shutterSound.triggerAttackRelease("0.05");
-                            } catch (e) {
-                                console.error("Tone.js error:", e);
-                            }
-                        }
-
-                        flashElement.classList.add('active');
-                        const timer1 = setTimeout(() => flashElement.remove(), 300);
-                        const timer2 = setTimeout(() => { 
-                            thumbnailElement.classList.add('visible'); 
-                        }, 100);
-                        const timer3 = setTimeout(() => {
-                            thumbnailElement.classList.add('shrink');
-                            const timer4 = setTimeout(() => thumbnailElement.remove(), 500);
-                            window.playwrightTimers.add(timer4);
-                        }, 3500);
-
-                        window.playwrightTimers.add(timer1);
-                        window.playwrightTimers.add(timer2);
-                        window.playwrightTimers.add(timer3);
                     }
                 }
 
@@ -405,17 +568,18 @@ class Simulator:
                             typeText(textBox, text, () => {
                                 const cleanupTimer = setTimeout(() => {
                                     textBox.remove();
-                                    if (window.playwrightTimers && window.playwrightTimers.has(cleanupTimer)) {
+                                    if (window.playwrightTimers.has(cleanupTimer)) {
                                         if (['text', 'scroll', 'key', 'info', 'processing'].includes(type)) {
                                             const pointerIcon = document.getElementById('playwright-cursor-pointer-icon');
                                             document.querySelectorAll('.playwright-cursor-icon').forEach(icon => icon.style.display = 'none');
-                                            pointerIcon.style.display = 'block';
-                                            pointerIcon.classList.add('icon-fade-in');
-                                            const fadeTimer = setTimeout(() => pointerIcon.classList.remove('icon-fade-in'), 300);
-                                            window.playwrightTimers.add(fadeTimer);
+                                            if (pointerIcon) {
+                                                pointerIcon.style.display = 'block';
+                                                pointerIcon.classList.add('icon-fade-in');
+                                                const fadeTimer = setTimeout(() => pointerIcon.classList.remove('icon-fade-in'), 300);
+                                                window.playwrightTimers.add(fadeTimer);
+                                            }
                                         }
                                     }
-                                    window.playwrightTimers.delete(cleanupTimer);
                                 }, 1000);
                                 window.playwrightTimers.add(cleanupTimer);
                             });
@@ -424,12 +588,7 @@ class Simulator:
                     window.playwrightTimers.add(timer);
                 }
 
-                if (type === 'screenshot') {
-                    triggerActionAnimations();
-                    return;
-                }
-
-                if (!coords || (parseFloat(cursor.style.left) === endX && parseFloat(cursor.style.top) === endY)) {
+                if (parseFloat(cursor.style.left) === endX && parseFloat(cursor.style.top) === endY) {
                     onCursorArrival();
                 } else {
                     const movementTimer = setTimeout(onCursorArrival, 150);
@@ -441,16 +600,20 @@ class Simulator:
         })();
         """
 
-    async def _run_simulation(self, params: dict):
+    async def run_animation(self, params: dict | None = None):
         """A helper to call the injected run_animation function."""
         if not self.page:
-            print("Simulator Error: Page object not set.")
+            print("Animator Error: Page object not set.")
             return
         try:
-            await self.page.evaluate("window.run_animation", params)
+            if params:
+                await self.page.evaluate("window.run_animation", params)
+            else:
+                await self.page.evaluate("window.run_animation({})")
+
         except Exception as e:
-            print(f"Simulator failed to run: {e}")
-            
+            print(f"Animator failed to run: {e}")
+
     async def get_coords(self, element_node: "DOMElementNode"):
         try:
             element_handle = self.page.locator(f"xpath={element_node.xpath}")
@@ -459,7 +622,7 @@ class Simulator:
                 description = element_node.get_description()
                 await self.info(text=f"Could not find element to click: {description}")
                 return None
-            
+
             box = await element_handle.bounding_box()
             if not box:
                 return None
@@ -471,38 +634,50 @@ class Simulator:
                 "y": box["y"] + box["height"] / 2,
             }
             return center_coords
-        
+
         except Exception as e:
-            print(f"Simulator failed to get element handle: {e}")
-            
-    async def click(self, element_node: 'DOMElementNode', text: str = "Click!"):
+            print(f"Animator failed to get element handle: {e}")
+
+    async def click(self, element_node: "DOMElementNode"=None, coords: dict|None = None, text: str = "Click!"):
         """
-        Gets fresh coordinates for an element and simulates a click animation.
+        Gets fresh coordinates for an element and animates a click animator.
         """
-        
+
         if not self.page:
             return
 
         try:
-            coords = await self.get_coords(element_node)
-            if not coords:
+            if element_node:
+                bbox = element_node.bbox
+                if bbox:
+                    x = bbox["x"] + bbox["width"] / 2
+                    y = bbox["y"] + bbox["height"] / 2
+            elif coords:
+                x = coords.get("x")
+                y = coords.get("y")
+
+            if not (x and y):
                 return
 
-            params = {"coords": coords, "text": text, "action": {"type": "click"}}
-            await self._run_simulation(params)
+            params = {
+                "coords": coords,
+                "text": text,
+                "action": {"type": "click"},
+            }
+            await self.run_animation(params)
 
         except Exception as e:
-            print(f"Simulator failed during click preparation: {e}")
+            print(f"Animator failed during click preparation: {e}")
 
     async def info(self, text: str):
-        """Simulates the info message on the browser page"""
-        await self._run_simulation({"text": text, "action": {"type": "info"}})
+        """Animates the info message on the browser page"""
+        await self.run_animation({"text": text, "action": {"type": "info"}})
 
     async def type(
         self, element_node: "DOMElementNode", text: Optional[str] = "Typing..."
     ):
         """
-        Simulates a text input animation.
+        Animates a text input animator.
         """
         if not self.page:
             return
@@ -513,43 +688,49 @@ class Simulator:
                 return
 
             params = {"coords": coords, "text": text, "action": {"type": "text"}}
-            await self._run_simulation(params)
+            await self.run_animation(params)
 
         except Exception as e:
-            print(f"Simulator failed during type preparation: {e}")
+            print(f"Animator failed during type preparation: {e}")
 
     async def screenshot(self, sound_effect: bool = True):
         """
-        Triggers the screenshot animation.
+        Triggers the screenshot animator.
         """
         params = {"action": {"type": "screenshot", "sound_effect": sound_effect}}
-        await self._run_simulation(params)
+        await self.run_animation(params)
 
     async def scroll(
-        self, element_node: "DOMElementNode", direction: str, text: Optional[str] = None
+        self,
+        direction: str,
+        text: str = None,
+        element_node: "DOMElementNode" = None,
+        coords: dict = None,
     ):
         """
-        Gets fresh coordinates for a target element and simulates a scroll animation.
+        Gets fresh coordinates for a target element and animates a scroll animator.
         """
         if not self.page:
             return
 
         try:
-            element_handle = await self.page.query_selector(
-                f"[data-highlight-id='{element_node.highlight_index}']"
-            )
-            if not element_handle:
-                print(
-                    f"Simulator could not find element with index: {element_node.highlight_index}"
-                )
-                return
+            x = None
+            y = None
 
-            coords = await self._get_page_coordinates(element_handle)
-            if not coords:
+            if element_node:
+                bbox = element_node.bbox
+                if bbox:
+                    x = bbox["x"] + bbox["width"] / 2
+                    y = bbox["y"] + bbox["height"] / 2
+            elif coords:
+                x = coords.get("x")
+                y = coords.get("y")
+
+            if not (x and y):
                 return
 
             # Use provided text or a sensible default.
-            animation_text = (
+            animator_text = (
                 text
                 if text is not None
                 else f"Scrolling towards element {element_node.highlight_index}"
@@ -557,19 +738,30 @@ class Simulator:
 
             params = {
                 "coords": coords,
-                "text": animation_text,
+                "text": animator_text,
                 "action": {"type": "scroll", "direction": direction},
             }
-            await self._run_simulation(params)
+            await self.run_animation(params)
 
         except Exception as e:
-            print(f"Simulator failed during scroll preparation: {e}")
+            print(f"Animator failed during scroll preparation: {e}")
 
-    async def stop_simulation(self):
-        """Stops any active animation."""
+    async def stop_all_animations(self):
+        """Stops any active animator."""
         if not self.page:
             return
         try:
-            await self.page.evaluate("window.stop_animation")
+            await self.page.evaluate("window.stop_all_animations")
         except Exception as e:
-            print(f"Failed to stop animation: {e}")
+            print(f"Failed to stop animator: {e}")
+
+    async def run_screenshot_animation(self):
+        """Runs the screenshot animation."""
+        if not self.page:
+            return
+        try:
+            await self.page.evaluate(
+                "window.run_screenshot_animation", {"sound_effect": True}
+            )
+        except Exception as e:
+            print(f"Failed to stop screenshot animation: {e}")
