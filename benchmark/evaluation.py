@@ -22,7 +22,7 @@ from datetime import datetime, timedelta
 # Import project modules (matching structure from example.py)
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from browser_use import Browser, BrowserConfig
-from agents.browser_agent.agent import BrowserAgent
+from agents.browser_executor.agent import BrowserAgent
 
 # --- CONFIGURATION ---
 TASK_DIRECTORY = "benchmark/tasks"
@@ -31,6 +31,7 @@ RESULTS_DIRECTORY = "benchmark/results"
 # --- DYNAMIC VALUE RESOLVER ---
 
 # TODO: Also evaluate the time taken to complete each task.
+
 
 def resolve_dynamic_values(value: str) -> str:
     """Resolves placeholders like [DATE_...] in task files."""
@@ -64,7 +65,8 @@ def load_tasks(task_directory: str) -> List[Dict]:
 
 
 # --- AGENT ORCHESTRATOR ---
- 
+
+
 async def run_single_task(task: Dict):
     """Instantiates and runs the agent for a single task, returning all results."""
     print(f"\n--- Running Task: {task['task_id']} ---")
@@ -84,20 +86,26 @@ async def run_single_task(task: Dict):
     )
 
     try:
-        
-        final_state = await agent.run(task=task["goal"], prompt=f"go to the {task['start_url']} and complete the task")
-        final_state['url'] = browser_context.state.url
-        final_state['content'] = final_state['messages'][-1].content if final_state['messages'] else ""
+
+        final_state = await agent.run(
+            task=task["goal"],
+            prompt=f"go to the {task['start_url']} and complete the task",
+        )
+        final_state["url"] = browser_context.state.url
+        final_state["content"] = (
+            final_state["messages"][-1].content if final_state["messages"] else ""
+        )
         # final_state['history'] = [message.__dict__['action_type'] for message in final_state.get("messages", []) if isinstance(message, ToolMessage)]
-        
+
     except Exception as e:
         print(f"  ERROR: Agent execution failed with an exception: {e}")
         return None
-        
+
     finally:
         await browser.close()
 
     return final_state
+
 
 # --- EVALUATION LOGIC ---
 
