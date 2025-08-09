@@ -13,6 +13,9 @@ from typing import Literal
 import httpx
 import psutil
 from dotenv import load_dotenv
+# FIXME: For avoiding bot detection, start with playwright-extra
+# OR  headless=False, # Important: launch headed
+#     args=['--headless=new'] # Then add the new headless argument
 from playwright.async_api import Browser as PlaywrightBrowser
 from playwright.async_api import Playwright, async_playwright
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
