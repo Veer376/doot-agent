@@ -91,7 +91,7 @@ class GeminiLLM(LLM):
                     
                     # Assigning the ID to the function_call as well.
                     part.function_call.id = id
-                    print(f"Function call ID assigned: {part.function_call.id}")
+
                     tool_call = ToolCall(
                         name=part.function_call.name,
                         args=part.function_call.args,
@@ -105,9 +105,9 @@ class GeminiLLM(LLM):
                 
         message = GeminiMessage(
             content=text,
-            tool_calls=tool_calls,  # If tool_calls is empty, it's still a valid empty list
+            tool_calls=tool_calls,
             thought=thought,
-            parts=parts,
+            parts=[part.to_json_dict() for part in parts if hasattr(part, "to_json_dict")] # Convert parts to JSON dict for serializability.
         )
 
         return message

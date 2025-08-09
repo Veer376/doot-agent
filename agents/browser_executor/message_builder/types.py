@@ -79,7 +79,7 @@ class MessagePlan(MessagePlanBase, BaseModel):
                     function_response=types.FunctionResponse(
                         id=tool_msg.tool_call_id,
                         name=tool_msg.name,
-                        response=tool_msg if isinstance(tool_msg, dict) else {"result": str(tool_msg.content)},
+                        response=tool_msg.content[0] if isinstance(tool_msg.content, list) and len(tool_msg.content) == 1 and isinstance(tool_msg.content[0], dict) else {"result": str(tool_msg.content)},
                     )
                 )
             )
@@ -91,18 +91,16 @@ class MessagePlan(MessagePlanBase, BaseModel):
         ai_message: GeminiMessage
         
         model_parts: list[types.Part] = []
-        
-        parts: types.Part = ai_message.parts if hasattr(ai_message, "parts") else []
-        
-        if not parts:
-            logger.warning("No parts found in AIMessage. This may lead to empty Gemini content.")
-            
+
+        parts: types.PartDict = ai_message.parts if hasattr(ai_message, "parts") else {}
+   
         for part in parts:
-            if hasattr(part, "thought"):
-                thought = part.text
+            part: types.PartDict
+            if "thought" in part:
+                thought = part["text"]
                 continue # NOTE: skipping the thought for saving tokens. OR we could have just included all the parts.
             else:
-                model_parts.append(part)
+                model_parts.append(types.Part(**part))
 
         if user_parts:
             contents.append(types.Content(role="user", parts=user_parts))

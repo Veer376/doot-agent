@@ -51,7 +51,7 @@ class GeminiMessage(AIMessage):
     """Extended AIMessage with gemini attributes."""
 
     thought: str | None
-    part: list[types.Part] = []
+    part: list[types.PartDict] = []
 
 class LLMUsageStats:
 
