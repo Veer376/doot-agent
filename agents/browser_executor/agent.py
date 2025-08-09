@@ -202,20 +202,14 @@ class BrowserAgent:
         messages = agent_state.get("messages", None)
         last_message = messages[-1] if messages else None
 
-        if last_message:
-            if isinstance(last_message, AIMessage) and last_message.tool_calls:
-                tool_calls = last_message.tool_calls
+        if isinstance(last_message, AIMessage) and hasattr(last_message, "tool_calls") and last_message.tool_calls:
+            tool_call = last_message.tool_calls[0]
 
-                if any(
-                    tool_call.get("name") == "finish_task" for tool_call in tool_calls
-                ):
-                    logger.debug("Finish task tool called, concluding /Ending task.")
-                    return "end"
+            if tool_call.get("name") == "finish_task":
+                logger.debug("Finish task tool called, concluding /Ending task.")
+                return "end"
 
-                return "continue"
-
-        logger.info("No messages or tool calls found exiting...")
-        return "end"
+        return "continue"
 
     def _build_agent(self) -> StateGraph:
         logger = get_agent_logger("graph_builder")
