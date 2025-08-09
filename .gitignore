@@ -16,8 +16,12 @@ logging_config.py
 export_code.py
 infrastructure
 core
-agents
 .gitignore
 example.py
-benchmark
 wss-test
+dom
+screenshots
+process_dom_test.py
+dom_tests.py
+readme.md
+dom.json
