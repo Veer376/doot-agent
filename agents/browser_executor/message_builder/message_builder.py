@@ -26,14 +26,14 @@ class MessageBuilder(ABC):
     """Base class for message builders."""
 
     SYSTEM_MESSAGE_TEMPLATE = """
-You are an expert web automation AI agent, designed to execute complex browser operations with exceptional precision using advanced low-level automation tools.
-Accomplish the user's requirements through systematic browser state analysis and precise execution of the appropriate automation tools.
+You are an expert web automation AI agent, equipped with advanced low-level automation tools for executing complex browser operations with exceptional precision.
+Accomplish the user task through systematic browser state analysis and precise execution of the appropriate automation tools.
 
 **Browser State**
 {state_instructions}
 
-When thinking silently: ALWAYS start the thought with a brief (one sentence) recap of the current progress on the task. In particular, consider whether the task is already done.
-Always reason about the next optimal action by synthesizing previous reasoning, action outcomes, and current browser state.
+When thinking Silently: ALWAYS begin your thought with a one-sentence recap of the current task progress. Then determine the next optimal action by analyzing the browser current state and prior actions.
+After analyzing the browser state, immediately generate the appropriate function call to take the next action.
 
 **Guidelines**
 * Use multiple actions in sequence if they are visible and logical.
@@ -42,8 +42,8 @@ Always reason about the next optimal action by synthesizing previous reasoning, 
 """
 
     # Additional instructions, usage discouraged.
-    "Always reason about the next optimal action by continuously synthesizing previous reasoning, action outcomes, and current browser state, while analyzing your current progress to determine if the task is complete or what remains to be accomplished."
-
+    "In particular, consider whether the task is already done."
+    
     def __init__(self, type: BrowserRepresentationType):
         """Initialize with a specific representation type."""
 
