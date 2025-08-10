@@ -11,7 +11,7 @@ from langchain_core.messages.tool import ToolCall
 import uuid
 from typing import Generic, TypeVar, Literal
 from dotenv import load_dotenv
-from .types import LLM, MessagePlanBase, LLMConfig, GeminiMessage
+from .types import LLM, MessageBlueprintBase, LLMConfig, GeminiMessage
 from logging_utils import get_llm_logger
 from .usage_stats import get_usage_stats
 
@@ -30,7 +30,7 @@ class GeminiLLM(LLM):
         self.client = genai.Client(api_key=api_key)
 
     async def __call__(
-        self, message_plan: MessagePlanBase, tools: list[Callable]|None = None, config: LLMConfig | None = None
+        self, message_plan: MessageBlueprintBase, tools: list[Callable]|None = None, config: LLMConfig | None = None
     ) -> GeminiMessage:
         """Get response from Gemini API and convert it to GeminiMessage format."""
 

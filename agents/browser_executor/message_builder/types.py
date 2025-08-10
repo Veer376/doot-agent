@@ -10,7 +10,7 @@ from langchain_core.messages import (
     HumanMessage,
 )
 from langchain_core.messages.tool import ToolCall
-from ...llm import MessagePlanBase, GeminiMessage
+from ...llm import MessageBlueprintBase, GeminiMessage
 from typing import Literal
 from logging_utils import get_message_builder_logger
 from ..utils import error_handler
@@ -18,7 +18,7 @@ from ..utils import error_handler
 logger = get_message_builder_logger("message_builder")
 
 
-class MessagePlan(MessagePlanBase, BaseModel):
+class MessageBlueprint(MessageBlueprintBase, BaseModel):
     """Contains the messages and tools to be used in the next step of the agent's reasoning."""
 
     system_message: str = Field(default="No system message provided. Exit immediately.")

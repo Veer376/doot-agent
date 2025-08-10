@@ -7,7 +7,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain.chat_models import init_chat_model
 from typing import Callable, TypeVar, Generic
-from .types import MessagePlanBase, LLMConfig
+from .types import MessageBlueprintBase, LLMConfig
 from .types import LLM
 from .usage_stats import get_usage_stats
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -22,16 +22,16 @@ class LangChainLLM(LLM):
 
     async def __call__(
         self,
-        messages: MessagePlanBase|list[BaseMessage],
+        messages: MessageBlueprintBase|list[BaseMessage],
         tools: list[Callable]|None = None,
-        config: LLMConfig = None,
+        config: LLMConfig|None = None,
     ) -> AIMessage:
         """Get a response from langgraph LLM."""
 
         # Instead of concatenating provider and model name, pass them separately
         model = init_chat_model(self.model_name, model_provider=self.provider)
         
-        if isinstance(messages, MessagePlanBase):
+        if isinstance(messages, MessageBlueprintBase):
             messages = messages.to_langchain()
 
         # We're ignoring the config parameter for now since LangChain doesn't need it

@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 
-class MessagePlanBase(ABC):
+class MessageBlueprintBase(ABC):
     """Base class for messages used get next response from LLMs."""
 
     @abstractmethod
@@ -41,7 +41,7 @@ class LLM:
 
     @abstractmethod
     async def __call__(
-        self, message_plan: MessagePlanBase, tools: list[Callable]|None=None, config: LLMConfig|None=None
+        self, message_plan: MessageBlueprintBase, tools: list[Callable]|None=None, config: LLMConfig|None=None
     ) -> AIMessage:
         """Call the LLM with the given tools and message plan."""
         pass

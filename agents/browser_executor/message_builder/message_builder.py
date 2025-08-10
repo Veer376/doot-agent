@@ -15,7 +15,7 @@ from .browser_representation import (
     BrowserRepresentationType,
 )
 from logging_utils import get_message_builder_logger
-from .types import MessagePlan
+from .types import MessageBlueprint
 
 if TYPE_CHECKING:
     from ..agent import BrowserState, AgentState
@@ -49,7 +49,7 @@ After analyzing the browser state, immediately generate the appropriate function
 
         self.type = type
         self.state_representation = self._create_state_representation()
-        self.message_plan = MessagePlan()
+        self.message_plan = MessageBlueprint()
 
     def _create_state_representation(self) -> BrowserRepresentation:
         """Create a BrowserRepresentation instance based on the specified type."""
@@ -162,7 +162,7 @@ After analyzing the browser state, immediately generate the appropriate function
         self,
         browser_state: "BrowserState",
         agent_state: "AgentState",
-    ) -> MessagePlan:
+    ) -> MessageBlueprint:
 
         self.build_system_message()
 

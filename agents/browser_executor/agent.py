@@ -19,7 +19,7 @@ from .utils import print_message, error_handler
 from browser_use.context import BrowserContext
 from browser_use.types import BrowserState
 from logging_utils import get_agent_logger
-from .message_builder import BrowserRepresentationType, MessageBuilder, MessagePlan
+from .message_builder import BrowserRepresentationType, MessageBuilder, MessageBlueprint
 from ..llm import LLM, GeminiLLM, LangChainLLM, LLMConfig
 from ..llm.usage_stats import get_usage_stats
 from .toolkit import ActionResult
@@ -76,7 +76,7 @@ class BrowserAgent:
 
         logger.debug(f"[{len(tools)}] active tools")
 
-        response = await self.llm(message_plan, tools)
+        response = await self.llm(message_plan, tools, config=LLMConfig(thinking_budget=1024))
 
         return {"messages": [response], "step": agent_state["step"] + 1}
     
@@ -115,7 +115,7 @@ class BrowserAgent:
             tool_results.append(
                 ToolMessage(
                     name=tool_name,
-                    content=result.to_dict(),
+                    content=[result.to_dict()], # content: Union[str, list[str, dict]]
                     tool_call_id=tool_call.get("id"),
                 )
             )
