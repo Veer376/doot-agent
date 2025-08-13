@@ -329,13 +329,15 @@
       label.style.position = "fixed";
       label.style.background = "black"; 
       label.style.color = "white";
-      label.style.fontFamily = "monospace"; // White mono-font
-      label.style.fontSize = "12px"; // Fixed font size
-      label.style.fontWeight = "normal";
-      label.style.padding = "2px 2px";
+      label.style.fontFamily = "'Arial', 'Segoe UI', sans-serif"; // More readable sans-serif font
+      label.style.fontSize = "12px"; // Slightly larger font size
+      label.style.fontWeight = "normal"; // Normal font weight
+      label.style.padding = "2px 2px"; // More padding for better visibility
       label.style.pointerEvents = "none";
       label.style.boxSizing = "border-box";
       label.style.borderBottomRightRadius = "5px";
+      // label.style.letterSpacing = "0.5px"; // Add letter spacing for clarity
+      // label.style.lineHeight = "1"; // Tighter line height
       label.textContent = index;
 
       // Create a temporary div for measuring the label dimensions
