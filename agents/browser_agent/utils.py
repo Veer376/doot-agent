@@ -14,6 +14,8 @@ from langchain_core.messages import (
 import base64
 import io
 from PIL import Image, ImageDraw, ImageFont
+from logging_utils import get_agent_logger
+from .messages.error_messages import MessageException
 
 logger = logging.getLogger(__name__)
 
@@ -551,25 +553,31 @@ import functools
 import logging
 import traceback
 import asyncio
-logger = logging.getLogger("agent_error")
 
-def error_handler(func):
+def escalate_error(func):
+    logger = get_agent_logger(f"{func.__name__}")
+    
     if asyncio.iscoroutinefunction(func):
         @functools.wraps(func)
         async def wrapper(*args, **kwargs):
             try:
                 return await func(*args, **kwargs)
+            except MessageException as e:
+                logger.info(f"Escalating MessageException: {e} to LLM")
             except Exception as e:
-                logger.error(f"Error in {func.__name__}: {e}")
+                logger.error(f"{e}")
                 logger.debug(traceback.format_exc())
-                # optionally: return fallback value or re-raise
         return wrapper
+    
     else:
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             try:
                 return func(*args, **kwargs)
+            except MessageException as e:
+                logger.info(f"Escalating MessageException: {str(e)} to LLM") 
             except Exception as e:
-                logger.error(f"Error in {func.__name__}: {e}")
+                logger.error(f"{e}")
                 logger.debug(traceback.format_exc())
         return wrapper
+

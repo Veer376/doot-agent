@@ -34,13 +34,13 @@ Accomplish the user task through systematic browser state analysis and precise e
 **Browser State**
 {state_instructions}
 
-When thinking Silently: ALWAYS begin your thought with a one-sentence recap of the current task progress. Then determine the next optimal action by analyzing the browser current state and prior actions.
-After analyzing the browser state, immediately generate the appropriate function call to take the next action.
+When thinking: 
+ALWAYS begin by concisely summarizing the task progress, referencing prior actions taken and their outcomes. 
+Then assess the current browser state in detail. 
+Based on this assessment, determine the next optimal action, specifying the exact tool to use, its required parameters, and the expected results from executing it.
 
 **Guidelines**
 * Use multiple actions in sequence if they are visible and logical.
-* To complete the task, you must use the finish_task tool.
-* There is a missing human input tool, use wait instead.
 """
 
     # Additional instructions, usage discouraged.
@@ -135,13 +135,13 @@ After analyzing the browser state, immediately generate the appropriate function
             "task", "No task provided. Exit immediately."
         )
 
-        # Dynamic Instructions (if any)
-        dynamic_messages = "**Instructions**"
+        # Dynamic Messages (if any)
+        dynamic_messages = ""
 
         active_messages = message_registry.get_active_messages(agent_state)
 
         if active_messages:
-            dynamic_messages += "\n".join(active_messages)
+            dynamic_messages += "**Heads-Up:**\n" + "\n".join(active_messages)
         
         if dynamic_messages:
             self.message_plan.dynamic_messages = dynamic_messages

@@ -13,10 +13,17 @@ from langchain_core.messages.tool import ToolCall
 from ...llm import MessageBlueprintBase, GeminiMessage
 from typing import Literal
 from logging_utils import get_message_builder_logger
-from ..utils import error_handler
 
-logger = get_message_builder_logger("message_builder")
+logger = get_message_builder_logger("blueprint")
 
+def error_handler(func):
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            logger.error(f"Error occurred in {func.__name__}: {e}")
+            raise
+    return wrapper
 
 class MessageBlueprint(MessageBlueprintBase, BaseModel):
     """Contains the messages and tools to be used in the next step of the agent's reasoning."""
@@ -40,7 +47,8 @@ class MessageBlueprint(MessageBlueprintBase, BaseModel):
             return self.to_langchain()
         else:
             raise ValueError(f"Unknown target: {target}")
-        
+    
+    @error_handler  
     def to_gemini_format(self) -> tuple[str, list[types.Content]]:
         """Convert the message plan to Gemini API format."""
         # The Gemini accepts the role "user" before the "model" role.
@@ -63,7 +71,6 @@ class MessageBlueprint(MessageBlueprintBase, BaseModel):
 
         if self.dynamic_messages:
             user_parts.append(types.Part(text=self.dynamic_messages))
-            print(f"Dynamic Instructions: {self.dynamic_messages}")
             
         # FUNCTION RESPONSES
         function_parts = []
@@ -114,6 +121,7 @@ class MessageBlueprint(MessageBlueprintBase, BaseModel):
         
         return self.system_message, contents
     
+    @error_handler
     def to_langchain_format(self) -> list[BaseMessage]:
         """Convert the message plan to LangChain format."""
 

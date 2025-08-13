@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 
 # Dependency imports
 from .toolkit.registry import tool_registry
-from .utils import print_message, error_handler
+from .utils import print_message, escalate_error
 from browser_use.context import BrowserContext
 from browser_use.types import BrowserState
 from logging_utils import get_agent_logger
@@ -24,6 +24,7 @@ from .perception import BrowserRepresentationType
 from ..llm import LLM, GeminiLLM, LangChainLLM, LLMConfig
 from ..llm.usage_stats import get_usage_stats
 from .toolkit import ActionResult
+from .messages.error_messages import ToolCallMissing, InvalidToolCall
 
 logger = get_agent_logger()
 
@@ -33,7 +34,7 @@ class AgentState(TypedDict):
     task: str
     step: int
     consecutive_failures: list[str]
-    last_action: str
+    last_action: str | None
 
 
 class BrowserAgent:
@@ -81,32 +82,33 @@ class BrowserAgent:
         )
 
         return {"messages": [response], "step": agent_state["step"] + 1}
-
+    
+    @escalate_error
     async def _tool_executor(self, agent_state: AgentState):
         """Custom tool node that handles tool execution."""
 
         logger = get_agent_logger("tool_executor")
 
-        last_message = agent_state["messages"][-1]
         tool_results = []
+        tool_name = None
 
-        # Log the number of tool calls
-        tool_calls = (
-            last_message.tool_calls if hasattr(last_message, "tool_calls") else []
-        )
+        tool_calls = getattr(agent_state["messages"][-1], "tool_calls", []) if len(agent_state["messages"]) > 0 else []
+
+        if not tool_calls:
+            raise ToolCallMissing()
 
         # FIXME: Check if the browser state has been changed since the last action.
         for tool_call in tool_calls:
             tool_name = tool_call["name"]
-            logger.debug(
-                f"Executing tool: {tool_name} with args: {tool_call.get('args', {})}"
-            )
 
             tool_to_call = self.tools.get(tool_name)
-
-            result: ActionResult = await tool_to_call(
+            
+            try:
+                result: ActionResult = await tool_to_call(
                 **tool_call["args"], browser_context=self.browser_context
-            )
+                )
+            except Exception as e:
+                raise InvalidToolCall()
 
             if hasattr(result, "error") and result.error:
                 agent_state["consecutive_failures"].append(result.error)
