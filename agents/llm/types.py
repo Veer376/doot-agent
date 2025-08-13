@@ -15,11 +15,11 @@ class MessageBlueprintBase(ABC):
     """Base class for messages used get next response from LLMs."""
 
     @abstractmethod
-    def to_gemini(self) -> tuple[str, list[types.Content]]:
+    def to_gemini_format(self) -> tuple[str, list[types.Content]]:
         pass
 
     @abstractmethod
-    def to_langchain(self) -> list[BaseMessage]:
+    def to_langchain_format(self) -> list[BaseMessage]:
         pass
 
 
@@ -137,6 +137,10 @@ class LLMUsageStats:
         if model_rates is None:
             # Skip cost calculation if cost isn't defined
             return
+
+        # Ensure tokens are not None
+        input_tokens = input_tokens or 0
+        output_tokens = output_tokens or 0
 
         # Calculate input cost (per 1M tokens)
         input_cost_usd = (input_tokens / 1_000_000) * model_rates["input"]

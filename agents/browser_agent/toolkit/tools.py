@@ -1,11 +1,9 @@
 import asyncio
-from typing import Any, Annotated
+from typing import Any, Annotated, Literal, TYPE_CHECKING
 from pydantic import BaseModel, Field
-from typing import Literal
 from langchain_core.tools import InjectedToolArg
 import logging
 from browser_use.context import BrowserContext
-from typing import TYPE_CHECKING
 from .registry import tool_registry  # Import from the registry in the same directory
 from .utils import get_extraction_plan
 from readability import Document
@@ -565,15 +563,3 @@ async def navigate(
         return ActionResult(
             error=f"Failed to perform navigation action '{action}': {str(e)}"
         )
-
-
-
-
-
-
-
-
-
-
-
-

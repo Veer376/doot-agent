@@ -31,7 +31,7 @@ class MessageBlueprint(MessageBlueprintBase, BaseModel):
     browser_state_text: str | None = None
     browser_state_image: str | None = None
 
-    dynamic_instructions: str | None = None
+    dynamic_messages: str | None = None
 
     def __call__(self, target: Literal["gemini", "langchain"]):
         if target == "gemini":
@@ -41,8 +41,7 @@ class MessageBlueprint(MessageBlueprintBase, BaseModel):
         else:
             raise ValueError(f"Unknown target: {target}")
         
-    @error_handler
-    def to_gemini(self) -> tuple[str, list[types.Content]]:
+    def to_gemini_format(self) -> tuple[str, list[types.Content]]:
         """Convert the message plan to Gemini API format."""
         # The Gemini accepts the role "user" before the "model" role.
         contents = []
@@ -62,10 +61,11 @@ class MessageBlueprint(MessageBlueprintBase, BaseModel):
         if self.browser_state_text:
             user_parts.append(types.Part(text=f"Browser: {self.browser_state_text}"))
 
-        if self.dynamic_instructions:
-            user_parts.append(types.Part(text=self.dynamic_instructions))
-         
-        # FUNCTION RESPONSES 
+        if self.dynamic_messages:
+            user_parts.append(types.Part(text=self.dynamic_messages))
+            print(f"Dynamic Instructions: {self.dynamic_messages}")
+            
+        # FUNCTION RESPONSES
         function_parts = []
         
         for tool_msg in self.tool_messages:
@@ -92,7 +92,7 @@ class MessageBlueprint(MessageBlueprintBase, BaseModel):
         
         model_parts: list[types.Part] = []
 
-        parts: types.PartDict = ai_message.parts if hasattr(ai_message, "parts") else {}
+        parts: types.PartDict = ai_message.parts if hasattr(ai_message, "parts") else []
    
         for part in parts:
             part: types.PartDict
@@ -114,8 +114,7 @@ class MessageBlueprint(MessageBlueprintBase, BaseModel):
         
         return self.system_message, contents
     
-    @error_handler
-    def to_langchain(self) -> list[BaseMessage]:
+    def to_langchain_format(self) -> list[BaseMessage]:
         """Convert the message plan to LangChain format."""
 
         contents = []
@@ -123,7 +122,7 @@ class MessageBlueprint(MessageBlueprintBase, BaseModel):
         ai_message: AIMessage
         
         content = ai_message.content if hasattr(ai_message, "content") else ""
-        tool_calls = ai_message.tool_calls if hasattr(ai_message, "tool_calls") else []
+        tool_calls = getattr(ai_message, "tool_calls", []) or []
                 
         # SYSTEM MESSAGE
         contents.append(SystemMessage(content=self.system_message))
@@ -152,10 +151,10 @@ class MessageBlueprint(MessageBlueprintBase, BaseModel):
                 "text": f"Goal: {self.task}",
             })
 
-        if self.dynamic_instructions:
+        if self.dynamic_messages:
             parts.append({
                 "type": "text",
-                "text": self.dynamic_instructions,
+                "text": self.dynamic_messages,
             })
 
 

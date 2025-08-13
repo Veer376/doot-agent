@@ -32,7 +32,7 @@ class LangChainLLM(LLM):
         model = init_chat_model(self.model_name, model_provider=self.provider)
         
         if isinstance(messages, MessageBlueprintBase):
-            messages = messages.to_langchain()
+            messages = messages.to_langchain_format()
 
         # We're ignoring the config parameter for now since LangChain doesn't need it
         # but we keep it in the method signature for compatibility with the LLM interface

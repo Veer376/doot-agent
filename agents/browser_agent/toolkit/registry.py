@@ -1,14 +1,15 @@
 import inspect
 import json
 from urllib.parse import urlparse
-from typing import Any, Callable
+from typing import Any, Callable, TYPE_CHECKING
 from pydantic import BaseModel, create_model
-from typing import TYPE_CHECKING
 from logging_utils import get_agent_logger
 
 # Use forward references
 if TYPE_CHECKING:
-    from ..agent import BrowserState, AgentState, BrowserContext
+    from browser_use.types import BrowserState
+    from browser_use.context import BrowserContext
+    from ..agent import AgentState
     from playwright.async_api import Page
 
 logger = get_agent_logger("tool_registry")
@@ -76,7 +77,9 @@ class ToolRegistry:
             logger.error(f"Error getting current page: {e}")
 
         # Check if text field is focused
-        text_field_focused = await browser_context.is_text_field_focused(page) if page else False
+        text_field_focused = (
+            await browser_context.is_text_field_focused(page) if page else False
+        )
 
         context = FilterContext(
             domain=domain,

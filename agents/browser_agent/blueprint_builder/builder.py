@@ -1,12 +1,11 @@
-from typing import Literal, Dict, Any, List, Union
+from typing import Literal, Dict, Any, List, Union, TYPE_CHECKING
 from langchain_core.messages import SystemMessage, HumanMessage, ToolMessage, AIMessage
-from typing import TYPE_CHECKING
 import json
 from enum import Enum
 from abc import ABC, abstractmethod
 from ..utils import compress_image, save_to_file, render_bboxes_on_screenshot
 import base64
-from .browser_representation import (
+from ..perception import (
     BrowserRepresentation,
     Screenshot,
     MinimalDomTextScreenshot,
@@ -15,12 +14,15 @@ from .browser_representation import (
     BrowserRepresentationType,
 )
 from logging_utils import get_message_builder_logger
-from .types import MessageBlueprint
+from .blueprint import MessageBlueprint
+from ..messages.messages import message_registry
 
 if TYPE_CHECKING:
-    from ..agent import BrowserState, AgentState
+    from browser_use.types import BrowserState
+    from ..agent import AgentState
 
 logger = get_message_builder_logger("executor")
+
 
 class MessageBuilder(ABC):
     """Base class for message builders."""
@@ -43,7 +45,7 @@ After analyzing the browser state, immediately generate the appropriate function
 
     # Additional instructions, usage discouraged.
     "In particular, consider whether the task is already done."
-    
+
     def __init__(self, type: BrowserRepresentationType):
         """Initialize with a specific representation type."""
 
@@ -70,37 +72,12 @@ After analyzing the browser state, immediately generate the appropriate function
 
     def build_system_message(self):
         """Return the system message with dynamic instructions."""
-        
+
         system_message = self.SYSTEM_MESSAGE_TEMPLATE.format(
             state_instructions=self.state_representation.get_state_instructions()
         )
         self.message_plan.system_message = system_message
 
-    def build_dynamic_instructions(
-        self,
-        browser_state: "BrowserState",
-        agent_state: "AgentState",
-    ):
-        """Return any additional instructions based on agent state."""
-        # Add condition-based instructions here
-        # For example, if agent has had multiple failures, add specific guidance
-        dynamic_instructions = ""
-
-        # FIXME: get the consecutive failures from the agent config. pass agent_state + agent_config together.
-        # consecutive_failures
-        failures = agent_state.get("consecutive_failures")
-        if len(failures) >= 2:
-            dynamic_instructions += (
-                "You have had multiple failures. Please analyze the last action "
-                "and current browser state carefully before proceeding. "
-                "Reason about the next most appropriate action to take. "
-                "If you think that you cannot complete the task, due to lack of tools "
-                "consider the 'finish_task' tool to end the task."
-            )
-
-        self.message_plan.dynamic_instructions = dynamic_instructions
-             
-         
     def build_ai_and_tool_messages(self, agent_state: "AgentState"):
         """Build the AI and tool messages."""
 
@@ -133,7 +110,7 @@ After analyzing the browser state, immediately generate the appropriate function
     def build_human_messages(
         self, browser_state: "BrowserState", agent_state: "AgentState"
     ):
-        
+
         # Browser State Content
         state_content = self.state_representation.get_state_content(
             browser_state, agent_state
@@ -145,18 +122,30 @@ After analyzing the browser state, immediately generate the appropriate function
 
             if "image" in state_content and state_content["image"]:
                 self.message_plan.browser_state_image = state_content["image"]
-                
-            else: raise ValueError(
-                "Browser state content must include either 'text' or 'image'."
-            )  
+
+            else:
+                raise ValueError(
+                    "Browser state content must include either 'text' or 'image'."
+                )
         else:
-            raise ValueError("Browser state content is empty or invalid.")  
-        
+            raise ValueError("Browser state content is empty or invalid.")
+
         # Task
-        self.message_plan.task = agent_state.get("task", "No task provided. Exit immediately.")
-        
+        self.message_plan.task = agent_state.get(
+            "task", "No task provided. Exit immediately."
+        )
+
         # Dynamic Instructions (if any)
-        self.build_dynamic_instructions(browser_state, agent_state)
+        dynamic_messages = "**Instructions**"
+
+        active_messages = message_registry.get_active_messages(agent_state)
+
+        if active_messages:
+            dynamic_messages += "\n".join(active_messages)
+        
+        if dynamic_messages:
+            self.message_plan.dynamic_messages = dynamic_messages
+
 
     def build_messages(
         self,

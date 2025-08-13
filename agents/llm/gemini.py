@@ -48,7 +48,7 @@ class GeminiLLM(LLM):
 
         logger.info(f"{len(processed_tools)} Tools processed successfully, proceeding with API call.")
 
-        system_instructions, contents = message_plan.to_gemini()
+        system_instructions, contents = message_plan.to_gemini_format()
 
         response = await self.client.aio.models.generate_content(
             model=self.model_name,

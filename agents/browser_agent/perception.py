@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 import json
 from enum import Enum
 from abc import ABC, abstractmethod
-from ..utils import compress_image, save_to_file, render_bboxes_on_screenshot
+from .utils import compress_image, save_to_file, render_bboxes_on_screenshot
 import base64
 from browser_use.dom.types import DOMElementNode
 import logging
@@ -12,7 +12,8 @@ from logging_utils import get_message_builder_logger
 
 
 if TYPE_CHECKING:
-    from ..agent import BrowserState, AgentState
+    from browser_use.types import BrowserState
+    from .agent import AgentState
 
 
 class BrowserRepresentationType(Enum):
@@ -75,9 +76,8 @@ class Screenshot(BrowserRepresentation):
             raise ValueError("No screenshot available. Inside the vision context")
 
         base64_screenshot = browser_state.screenshot
-        
+
         state_text = f"Browser: {browser_state.title}\n URL: {browser_state.url}\n"
-        
 
         try:
             step = agent_state.get("step")
@@ -125,12 +125,14 @@ class MinimalDomTextScreenshot(Screenshot):
 
         return {
             "image": screenshot_content,
-            "text": {"""
+            "text": {
+                """
                 Minimal DOM Structure:
                 (Minimal DOM representation would go here)
                 """,
-            }
+            },
         }
+
 
 class MarkdownDOM(BrowserRepresentation):
     """Browser state representation that uses a Markdown rendering of the DOM structure.
@@ -382,9 +384,8 @@ class MarkdownDOM(BrowserRepresentation):
             interaction_note = "\n\nNOTE: No interactive elements were detected on this page. You may need to scroll to find interactive elements."
 
         return {
-                "text": f"# DOM Structure (Markdown)\n```\n{markdown_content}\n```{interaction_note}",
-            }
-        
+            "text": f"# DOM Structure (Markdown)\n```\n{markdown_content}\n```{interaction_note}",
+        }
 
 
 class JsonDOM(BrowserRepresentation):
@@ -595,8 +596,5 @@ class JsonDOM(BrowserRepresentation):
             interaction_note = "\n\nNOTE: No interactive elements were detected on this page. You may need to scroll to find interactive elements."
 
         return {
-                "text": f"# DOM Structure (JSON)\n```json\n{json_content}\n```{interaction_note}",
-            }
-        
-
-
+            "text": f"# DOM Structure (JSON)\n```json\n{json_content}\n```{interaction_note}",
+        }
