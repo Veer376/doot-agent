@@ -304,7 +304,7 @@
         const overlay = document.createElement("div");
         overlay.style.position = "fixed";
         
-        overlay.style.border = "2px solid black"; // Black solid box, 2px thick
+        overlay.style.border = "1.2px solid black"; // Black solid box, 1.2px thick
         overlay.style.backgroundColor = "transparent"; // Transparent fill
         overlay.style.pointerEvents = "none";
         overlay.style.boxSizing = "border-box";
@@ -331,13 +331,14 @@
       label.style.background = "black"; 
       label.style.color = "white";
       label.style.fontFamily = "'Arial', 'Segoe UI', sans-serif"; // More readable sans-serif font
-      label.style.fontSize = "12px"; // Slightly larger font size
+      label.style.fontSize = "12.5px"; // Slightly larger font size
       label.style.fontWeight = "normal"; // Normal font weight
-      label.style.padding = "0px 2px"; // More padding for better visibility
+      label.style.padding = "0px 1.5px 0px 1.2px"; // More padding for better visibility
       label.style.pointerEvents = "none";
       label.style.boxSizing = "border-box";
-      // label.style.borderBottomRightRadius = "4px";
-      label.style.lineHeight = "1.3"; // Tighter line height
+      label.style.borderBottomRightRadius = "4px";
+      label.style.lineHeight = "1.2"; // Tighter line height
+      label.style.letterSpacing = "0.1px";
       label.textContent = index;
 
       // Create a temporary div for measuring the label dimensions
@@ -373,15 +374,111 @@
       } 
       // First fallback - place label to the left of the bounding box
       else if ((isTooNarrow || isTooShort) && firstRectLeft > labelWidth) {
-        // Check if there's space on the left
-        const testPoint = document.elementFromPoint(firstRectLeft - labelWidth / 2, firstRectTop + labelHeight / 2);
-        const hasSpaceOnLeft = !testPoint || testPoint.classList.contains('playwright-highlight-label') || 
-                               testPoint.id === HIGHLIGHT_CONTAINER_ID;
+        // Check multiple points along the left side for interactive elements
+        const leftX = firstRectLeft - labelWidth;
+        const testPoints = [
+          { y: firstRectTop, description: 'Top edge' },
+          { y: firstRectTop + firstRectHeight/2, description: 'Middle' },
+          { y: firstRectTop + firstRectHeight, description: 'Bottom edge' }
+        ];
+        
+        let hasInteractiveElementOnLeft = false;
+        let elementOnLeftInfo = null;
+
+        // Check each point along the left side
+        for (const point of testPoints) {
+          const el = document.elementFromPoint(leftX, point.y);
+          
+          // If there's any element at this point that's not part of the highlighting system
+          // and is interactive, we don't want to position the label there
+          if (el && 
+              el.id !== HIGHLIGHT_CONTAINER_ID && 
+              !el.classList.contains('playwright-highlight-label')) {
+            
+            // Use our existing isInteractiveElement function to check if it's interactive
+            if (isInteractiveElement(el)) {
+              hasInteractiveElementOnLeft = true;
+              elementOnLeftInfo = {
+                element: el,
+                tagName: el.tagName,
+                id: el.id,
+                classes: Array.from(el.classList),
+                interactive: true,
+                position: point.description
+              };
+              break;
+            }
+            
+            // Store info about the last non-interactive element found for debugging
+            elementOnLeftInfo = {
+              element: el,
+              tagName: el.tagName,
+              id: el.id,
+              classes: Array.from(el.classList),
+              interactive: false,
+              position: point.description
+            };
+          }
+        }
+        
+        // Consider left side clear if there's enough space and no interactive elements
+        const hasSpaceOnLeft = !hasInteractiveElementOnLeft;
+        
+        // Debug info - only logs when debugMode is true
+        if (debugMode) {
+          console.group('Label Positioning Debug - Improved');
+          
+          // Basic dimensions
+          console.log('Element dimensions:');
+          console.log('firstRectLeft, firstRectTop, labelW, labelH:',
+            firstRectLeft, firstRectTop, labelWidth, labelHeight);
+          console.log('firstRectWidth, firstRectHeight:', firstRectWidth, firstRectHeight);
+          
+          // Size checks
+          console.log('\nSize checks:');
+          console.log('isTooNarrow:', isTooNarrow, '(firstRectWidth <= 1.5 * labelWidth)', 
+            firstRectWidth, '<=', 1.5 * labelWidth, firstRectWidth <= 1.5 * labelWidth);
+          console.log('isTooShort:', isTooShort, '(firstRectHeight <= 1.5 * labelHeight)', 
+            firstRectHeight, '<=', 1.5 * labelHeight, firstRectHeight <= 1.5 * labelHeight);
+          
+          // Left side check
+          console.log('\nLeft side check:');
+          console.log('Checking for interactive elements at left position (x):', leftX);
+          console.log('Has interactive element on left:', hasInteractiveElementOnLeft);
+          console.log('Element info on left:', elementOnLeftInfo);
+          console.log('hasSpaceOnLeft final result:', hasSpaceOnLeft);
+          
+          // Label position candidates
+          console.log('\nLabel position candidates:');
+          console.log('Left-side positioning (if space available):', {
+            top: firstRectTop,
+            left: leftX,
+            offScreenLeft: leftX < 0
+          });
+          console.log('Above positioning (fallback):', {
+            top: firstRectTop - labelHeight,
+            left: firstRectLeft,
+            offScreenTop: (firstRectTop - labelHeight) < 0
+          });
+          
+          // Advanced debugging: check multiple points along left side
+          console.log('\nDetailed test points along left side:');
+          testPoints.forEach(point => {
+            const el = document.elementFromPoint(leftX, point.y);
+            const isInteractive = el && isInteractiveElement(el);
+            console.log(`Point at ${point.description} (${leftX}, ${point.y}):`);
+            console.log('- Element:', el ? `${el.tagName}${el.id ? '#'+el.id : ''}${el.className ? '.'+el.className.replace(/\s+/g, '.') : ''}` : 'none');
+            console.log('- Is interactive:', isInteractive);
+            console.log('- Would be clear for label:', !el || el.classList.contains('playwright-highlight-label') || el.id === HIGHLIGHT_CONTAINER_ID);
+          });
+          
+          console.groupEnd();
+        }
         
         if (hasSpaceOnLeft) {
           // Align top edges, place left of the box
           labelTop = firstRectTop;
-          labelLeft = firstRectLeft - labelWidth;
+          labelLeft = leftX;
         } else {
           // Second fallback - place above the box
           labelTop = firstRectTop - labelHeight;
