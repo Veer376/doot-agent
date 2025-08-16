@@ -722,7 +722,7 @@
     // Cache the tagName and style lookups
     const tagName = element.tagName.toLowerCase();
     const style = getCachedComputedStyle(element);
-
+    
     // Exclude empty, non-semantic tags
     if ((tagName === 'p' || tagName === 'span' || tagName ==='div') &&
       // element.textContent.trim() === '' &&
@@ -801,11 +801,11 @@
       "textarea",   // Text areas
       "details",    // Expandable details
       "summary",    // Summary element (clickable part of details)
-      "label",      // Form labels (often clickable)
       "option",     // Select options
       "optgroup",   // Option groups
       "fieldset",   // Form fieldsets (can be interactive with legend)
       "legend",     // Fieldset legends
+      // "label" removed from this list to handle it separately
     ]);
 
     // Define explicit disable attributes and properties
@@ -821,6 +821,46 @@
       // 'tabindex="-1"',     // Removed from tab order
       // 'aria-hidden="true"' // Hidden from screen readers
     ]);
+
+    if (tagName == "fieldset") return false;
+
+    // Special handling for labels - check if they're associated with interactive form controls
+    if (tagName === "label") {
+      // Check if the label has a 'for' attribute pointing to an interactive form control
+      const forAttr = element.getAttribute('for');
+      if (forAttr) {
+        const targetElement = element.ownerDocument.getElementById(forAttr);
+        if (targetElement) {
+          // Check if the target is an interactive form control
+          const targetTag = targetElement.tagName.toLowerCase();
+          const isInteractiveTarget = ["input", "textarea", "select", "button"].includes(targetTag);
+          
+          // Check if the target is not disabled
+          const isTargetEnabled = !(targetElement.disabled || targetElement.readOnly || 
+                                   targetElement.hasAttribute('disabled') || 
+                                   targetElement.getAttribute('aria-disabled') === 'true' );
+          
+          return isInteractiveTarget && isTargetEnabled;
+        }
+        return false; // 'for' attribute points to a non-existent element
+      }
+      
+      // Check if the label wraps an interactive form control
+      for (const child of element.children) {
+        if (child.nodeType === Node.ELEMENT_NODE) {
+          const childTag = child.tagName.toLowerCase();
+          if (["input", "textarea", "select", "button"].includes(childTag) && 
+              !(child.disabled || child.readOnly || 
+                child.hasAttribute('disabled') || 
+                child.getAttribute('aria-disabled') === 'true')) {
+            return true; // Contains an enabled form control
+          }
+        }
+      }
+      
+      // Label is not associated with any interactive control
+      return false;
+    }
 
     // handle inputs, select, checkbox, radio, textarea, button and make sure they are not cursor style disabled/not-allowed
     if (interactiveElements.has(tagName)) {
@@ -1104,7 +1144,7 @@
 
   // --- Define constants for distinct interaction check ---
   const DISTINCT_INTERACTIVE_TAGS = new Set([
-    'a', 'button', 'input', 'select', 'textarea', 'summary', 'details', 'label', 'option'
+    'a', 'button', 'input', 'select', 'textarea', 'summary', 'details', 'option', 'label'
   ]);
   const INTERACTIVE_ROLES = new Set([
     'button', 'link', 'menuitem', 'menuitemradio', 'menuitemcheckbox',
