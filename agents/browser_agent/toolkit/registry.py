@@ -24,6 +24,7 @@ class FilterContext(BaseModel):
     step: int | None = None
     last_action: str | None = None
     text_field_focused: bool = False
+    reserved_tools: list[str] = []  # Tools reserved for the next turn only.
 
 
 class ToolRegistry:
@@ -86,6 +87,7 @@ class ToolRegistry:
             step=agent_state.get("step"),
             last_action=agent_state.get("last_action"),
             text_field_focused=text_field_focused,
+            reserved_tools=agent_state.get("reserved_tools", [])
         )
 
         active_tools = []

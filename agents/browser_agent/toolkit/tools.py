@@ -16,9 +16,92 @@ class ActionResult(BaseModel):
     message: str | None = None
     error: str | None = None
     data: Any = None
+    reserve_tools: list[str] = []
 
     def to_dict(self):
         return self.model_dump(exclude_none=True)
+
+
+@tool_registry.register()
+async def type_text(
+    element_index: int,
+    text: str,
+    press_enter: bool,
+    browser_context: Annotated[BrowserContext | None, InjectedToolArg] = None,
+) -> ActionResult:
+    """Types text into a focused text field, identified by its numbered label."""
+    
+    element_node = await browser_context.get_dom_element_by_index(element_index)
+
+    if not element_node:
+        return ActionResult(error=f"Element index {element_index} not found")
+
+    try:
+        element_description = element_node.get_description()
+
+        # Check if the element is a button or has a role of button
+        if (
+            element_node.tag_name == "button"
+            or element_node.attributes.get("role") == "button"
+        ):
+            return ActionResult(
+                error=f"Element {element_index}({element_description}) is a button"
+            )
+
+        dropdown_info = await browser_context.is_element_dropdown(element_node)
+
+        if dropdown_info.get("is_dropdown"):
+            logger.debug(
+                f"Element {element_index} is a dropdown. Handling in type_text() tool."
+            )
+
+            try:
+                page = await browser_context.get_agent_current_page()
+                element_handle = await browser_context.get_locate_element(element_node)
+                await element_handle.wait_for_element_state("stable")
+                await element_handle.click()
+                await asyncio.sleep(1)
+                await page.keyboard.type(text, delay=100)
+                await page.keyboard.press("Enter")
+                await asyncio.sleep(1)
+                dropdown_details = await browser_context.get_dropdown_details(
+                    element_node
+                )
+                selected_options = dropdown_details.get("selected_options", [])
+                options = dropdown_details.get("options", [])
+                message = (
+                    f"The element {element_index}({element_description}) is a dropdown. "
+                    "And it has been handled using search and select the dropdown option. "
+                    "I am providing you with the selected options and all available options. "
+                    "VERIFY if the selected options are correct, if you think that they are not, then use the dropdown tool. "
+                )
+                return ActionResult(
+                    message=message,
+                    data={"selected_options": selected_options, "options": options},
+                    reserve_tools=["select_dropdown_option"],
+                )
+
+            except Exception as e:
+                return ActionResult(
+                    message=f"Element {element_index}({element_description}) is dropdown element. Use the appropriate tool to interact with it."
+                )
+
+        await browser_context._input_text_element_node(element_node, text)
+        message = f"Typed text in element {element_index}({element_description})"
+        # FIXME: implement press_keys in browser_context and handle the stale state if type text fails.
+
+        if press_enter:
+            page = await browser_context.get_agent_current_page()
+            await page.keyboard.press("Enter")
+            message += " and sent it by pressing Enter key"
+
+        return ActionResult(message=message)
+
+    except Exception as e:
+        logger.error(f"Failed to type text into element {element_index}: {str(e)}")
+        return ActionResult(
+            error=f"Failed to type text into element {element_index}({element_node.get_description()})"
+        )
 
 
 @tool_registry.register(
@@ -38,9 +121,9 @@ async def google_search(
         return ActionResult(message=f"Search failed: {str(e)}")
 
 
-# TODO: we can always navigate the url in the new tab, eliminating the need of create_tab tool.
-# @tool_registry.register()
-async def goto_to_url(
+# NOTE: we can always navigate the url in the new tab, eliminating the need of create_tab tool.
+@tool_registry.register()
+async def goto_url(
     url: str, browser_context: Annotated[BrowserContext | None, InjectedToolArg] = None
 ) -> ActionResult:
     """Navigates the browser to a specific URL endpoint as a direct web address e.g. www.linkedin.com/jobs"""
@@ -54,7 +137,7 @@ async def goto_to_url(
         return ActionResult(error=f"Failed to navigate to {url}. {str(e)}")
 
 
-@tool_registry.register()
+# @tool_registry.register()
 async def click_element(
     element_index: int,
     browser_context: Annotated[BrowserContext | None, InjectedToolArg] = None,
@@ -68,6 +151,27 @@ async def click_element(
             logger.debug(f"Element with index {element_index} not found.")
             return ActionResult(error=f"Element index {element_index} not found.")
 
+        dropdown_info = await browser_context.is_element_dropdown(element_node)
+        if dropdown_info.get("is_dropdown", False):
+            logger.debug(
+                f"Element {element_index} is a dropdown. Handling in click_element() tool."
+            )
+
+            dropdown_details = await browser_context.get_dropdown_details(element_node)
+            message = (
+                f"Element {element_index}({element_node.get_description()}) and "
+                "hence must be handled using the appropriate dropdown tool. "
+                "Determine which option(s) to select and pass them to the tool."
+            )
+            return ActionResult(
+                message=message,
+                data={
+                    "selected_options": dropdown_details.get("selected_options", []),
+                    "options": dropdown_details.get("options", []),
+                },
+                reserve_tools=["select_dropdown_option"],
+            )
+
         session = await browser_context.get_session()
         initial_pages = len(session.context.pages)
 
@@ -75,12 +179,17 @@ async def click_element(
         # if await browser_context.is_file_uploader(element_node):
         #     return ActionResult(message=f'Index {element_index} - has an element which opens file upload dialog. To upload files please use a specific function to upload files ')
 
-        download_path = await browser_context._click_element_node(element_node)
-        if download_path:
-            message = f"Downloaded file to {download_path}"
-        else:
-            # FIXME: Instead of returning the element_node we can find the lastest handle present using xpath, providing the LLM the feedback.
-            message = f"Clicked at '{element_node.get_description()}' with index [{element_index}]"
+        try:
+            download_path = await browser_context._click_element_node(element_node)
+            if download_path:
+                message = f"Downloaded file to {download_path}"
+            else:
+                # FIXME: Instead of returning the element_node we can find the lastest handle present using xpath, providing the LLM the feedback.
+                message = f"Clicked at element {element_index}({element_node.get_description()})"
+
+        except Exception as click_error:
+            logger.warning(f"Click encountered an error but may have succeeded: {str(click_error)}")
+            message = f"Clicked at element {element_index}({element_node.get_description()}) - Note: Click succeeded but encountered post-click issues."
 
         session = await browser_context.get_session()
         if len(session.context.pages) > initial_pages:
@@ -97,51 +206,6 @@ async def click_element(
         )
 
 
-# FIXME: handle overriding the current text.
-@tool_registry.register()
-async def type_text(
-    element_index: int,
-    text: str,
-    press_enter: bool,
-    browser_context: Annotated[BrowserContext | None, InjectedToolArg] = None,
-) -> ActionResult:
-    """Types text directly into a textfield, identified by its numbered label."""
-
-    element_node = await browser_context.get_dom_element_by_index(element_index)
-
-    if not element_node:
-        return ActionResult(error=f"Element index {element_index} not found")
-
-    try:
-        element_description = element_node.get_description()
-
-        # TODO: add more checks.
-        if (
-            element_node.tag_name == "button"
-            or element_node.attributes.get("role") == "button"
-        ):
-            return ActionResult(
-                error=f"Element {element_index}({element_description}) is a button"
-            )
-
-        await browser_context._input_text_element_node(element_node, text)
-        message = f"Typed text in element {element_index}({element_description})"
-        # FIXME: implement press_keys in browser_context and handle the stale state if type text fails.
-        if press_enter:
-            page = await browser_context.get_agent_current_page()
-            await page.keyboard.press("Enter")
-            message += " and sent it by pressing Enter key"
-
-        return ActionResult(message=message)
-
-    except Exception as e:
-        logger.error(f"Failed to type text into element {element_index}: {str(e)}")
-        return ActionResult(
-            error=f"Failed to type text into element {element_index}({element_node.get_description()})"
-        )
-
-
-# FIXME: we can reduce the wait tool request in case of content loading, based on the no. interative element present - in context.py
 @tool_registry.register()
 async def wait(
     seconds: int,
@@ -210,9 +274,7 @@ async def scroll(
         return ActionResult(message=f"Scroll failed: {str(e)}")
 
 
-@tool_registry.register(
-    is_active=lambda ctx: ctx.last_action in ["scroll"] and ctx.step > 0
-)
+@tool_registry.register(is_active=lambda ctx: ctx.last_action in ["scroll"] and ctx.step > 0)
 async def find(
     name: str,
     role: str,
@@ -518,48 +580,49 @@ async def scroll(
         return ActionResult(error=f"Failed to scroll")
 
 
-@tool_registry.register()
-async def navigate(
-    action: Literal["goto", "back", "forward", "refresh"],
-    url: str | None = None,
+@tool_registry.register(is_active=lambda ctx: "select_dropdown_option" in ctx.reserved_tools)
+async def select_dropdown_option(
+    element_index: int,
+    option_index: int,
     browser_context: Annotated[BrowserContext | None, InjectedToolArg] = None,
 ) -> ActionResult:
-    """Handles all browser navigation like going to a URL, reloading, or moving in history. url: The URL to navigate to (only required for the 'goto' action)."""
-    if not browser_context:
-        return ActionResult(error="Browser context is not available.")
-
+    """
+    Selects an option from a dropdown by its index.
+    """
     try:
-        page = await browser_context.get_agent_current_page()
+        element_node = await browser_context.get_dom_element_by_index(element_index)
 
-        if action == "goto":
-            if not url:
-                return ActionResult(error="A 'url' is required for the 'goto' action.")
-            await page.goto(url)
-            await page.wait_for_load_state()
-            return ActionResult(message=f"Navigated to URL: {url}")
+        if not element_node:
+            return ActionResult(error=f"Element {element_index} not found. Try Again")
 
-        elif action == "back":
-            await page.go_back()
-            await page.wait_for_load_state()
-            return ActionResult(message="Navigated back in history.")
-
-        elif action == "forward":
-            await page.go_forward()
-            await page.wait_for_load_state()
-            return ActionResult(message="Navigated forward in history.")
-
-        elif action == "refresh":
-            await page.reload()
-            await page.wait_for_load_state()
-            return ActionResult(message="Page has been refreshed.")
-
-        else:
+        # First check if it's a dropdown
+        dropdown_info = await browser_context.is_element_dropdown(element_node)
+        if not dropdown_info.get("is_dropdown", False):
             return ActionResult(
-                error=f"Invalid action '{action}'. Must be one of 'goto', 'back', 'forward', or 'refresh'."
+                error=f"Element {element_index} ({element_node.get_description()}) is not a dropdown."
             )
 
-    except Exception as e:
-        # Generic error handler for unexpected issues
-        return ActionResult(
-            error=f"Failed to perform navigation action '{action}': {str(e)}"
+        # Get dropdown details to include in the response
+        dropdown_details = await browser_context.get_dropdown_details(element_node)
+
+        # Use the new method to select by index
+        result = await browser_context.select_dropdown_option_by_index(
+            element_node, option_index
         )
+
+        if result.get("success"):
+            selected_option = result.get("selected_option", {})
+            option_text = selected_option.get("text", f"option at index {option_index}")
+
+            return ActionResult(
+                message=f"Successfully selected '{option_text}' from dropdown element {element_index}.",
+                data={
+                    "selected_option": selected_option,
+                    "all_options": dropdown_details.get("options", []),
+                },
+            )
+        else:
+            error_message = result.get("message", "Failed to select dropdown option")
+            return ActionResult(error=f"{error_message}")
+    except Exception as e:
+        return ActionResult(error=f"Error selecting dropdown option: {str(e)}")

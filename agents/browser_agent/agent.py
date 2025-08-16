@@ -35,7 +35,7 @@ class AgentState(TypedDict):
     step: int
     consecutive_failures: list[str]
     last_action: str | None
-
+    reserved_tools: list[str] = [] # Reserved tools for the next turn only.
 
 class BrowserAgent:
     def __init__(
@@ -91,7 +91,8 @@ class BrowserAgent:
 
         tool_results = []
         tool_name = None
-
+        reserved_tools = []
+        
         tool_calls = getattr(agent_state["messages"][-1], "tool_calls", []) if len(agent_state["messages"]) > 0 else []
 
         if not tool_calls:
@@ -115,6 +116,8 @@ class BrowserAgent:
             else:
                 agent_state["consecutive_failures"].clear()
 
+            reserved_tools.extend(getattr(result, "reserve_tools", []))
+
             tool_results.append(
                 ToolMessage(
                     name=tool_name,
@@ -123,7 +126,11 @@ class BrowserAgent:
                 )
             )
 
-        return {"messages": tool_results, "last_action": tool_name}
+        return {
+            "messages": tool_results, 
+            "last_action": tool_name, 
+            "reserved_tools": reserved_tools
+        }
 
     async def _task_summarizer(self, agent_state: AgentState):
         """Summarizes the task and prepares the final message for the user."""
