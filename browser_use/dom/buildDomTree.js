@@ -308,7 +308,8 @@
         overlay.style.backgroundColor = "transparent"; // Transparent fill
         overlay.style.pointerEvents = "none";
         overlay.style.boxSizing = "border-box";
-        overlay.style.borderRadius = "5px";
+        overlay.style.borderRadius = "4px";
+        overlay.style.borderTopLeftRadius = "0px"
 
         const top = rect.top + iframeOffset.y;
         const left = rect.left + iframeOffset.x;
@@ -332,12 +333,11 @@
       label.style.fontFamily = "'Arial', 'Segoe UI', sans-serif"; // More readable sans-serif font
       label.style.fontSize = "12px"; // Slightly larger font size
       label.style.fontWeight = "normal"; // Normal font weight
-      label.style.padding = "2px 2px"; // More padding for better visibility
+      label.style.padding = "0px 2px"; // More padding for better visibility
       label.style.pointerEvents = "none";
       label.style.boxSizing = "border-box";
-      label.style.borderBottomRightRadius = "5px";
-      // label.style.letterSpacing = "0.5px"; // Add letter spacing for clarity
-      // label.style.lineHeight = "1"; // Tighter line height
+      // label.style.borderBottomRightRadius = "4px";
+      label.style.lineHeight = "1.3"; // Tighter line height
       label.textContent = index;
 
       // Create a temporary div for measuring the label dimensions
@@ -890,7 +890,7 @@
       'combobox',        // Dropdown with text input
       'searchbox',       // Search input field
       'textbox',         // Text input field
-      // 'listbox',         // Selectable list
+      'listbox',         // Selectable list
       'option',          // Selectable option in a list
       'scrollbar'        // Scrollable control
     ]);
@@ -1109,7 +1109,7 @@
   const INTERACTIVE_ROLES = new Set([
     'button', 'link', 'menuitem', 'menuitemradio', 'menuitemcheckbox',
     'radio', 'checkbox', 'tab', 'switch', 'slider', 'spinbutton',
-    'combobox', 'searchbox', 'textbox', 'listbox', 'option', 'scrollbar'
+    'combobox', 'searchbox', 'textbox', 'listbox', 'scrollbar'
   ]);
 
   /**
