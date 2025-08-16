@@ -137,7 +137,7 @@ async def goto_url(
         return ActionResult(error=f"Failed to navigate to {url}. {str(e)}")
 
 
-# @tool_registry.register()
+@tool_registry.register()
 async def click_element(
     element_index: int,
     browser_context: Annotated[BrowserContext | None, InjectedToolArg] = None,
