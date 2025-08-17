@@ -333,11 +333,11 @@
       label.style.fontFamily = "'Arial', 'Segoe UI', sans-serif"; // More readable sans-serif font
       label.style.fontSize = "12.5px"; // Slightly larger font size
       label.style.fontWeight = "normal"; // Normal font weight
-      label.style.padding = "0px 1.5px 0px 1.2px"; // More padding for better visibility
+      label.style.padding = "0.4px 1.5px 0px 1.2px"; // More padding for better visibility
       label.style.pointerEvents = "none";
       label.style.boxSizing = "border-box";
       label.style.borderBottomRightRadius = "4px";
-      label.style.lineHeight = "1.2"; // Tighter line height
+      label.style.lineHeight = "1"; // Tighter line height
       label.style.letterSpacing = "0.1px";
       label.textContent = index;
 
@@ -387,8 +387,8 @@
 
         // Check each point along the left side
         for (const point of testPoints) {
-          const el = document.elementFromPoint(leftX, point.y);
-          
+          const el = document.elementFromPoint(leftX-2, point.y); //Checking with some extra space to avoid clutteredness.
+
           // If there's any element at this point that's not part of the highlighting system
           // and is interactive, we don't want to position the label there
           if (el && 
@@ -478,16 +478,16 @@
         if (hasSpaceOnLeft) {
           // Align top edges, place left of the box
           labelTop = firstRectTop;
-          labelLeft = leftX;
+          labelLeft = leftX+1;
         } else {
           // Second fallback - place above the box
-          labelTop = firstRectTop - labelHeight;
+          labelTop = firstRectTop - labelHeight + 1;
           labelLeft = firstRectLeft;
         }
       } 
       // Final fallback - place label at top-left (default position) if other conditions don't apply
       else {
-        labelTop = firstRectTop;
+        labelTop = firstRectTop; //overlap a little
         labelLeft = firstRectLeft;
       }
 
@@ -1381,16 +1381,48 @@
     const rect = getCachedBoundingRect(element);
     if (!rect) return null;
     
-    // Calculate absolute position by adding scroll position
+    // Calculate scroll position
     const scrollX = window.pageXOffset || document.documentElement.scrollLeft;
     const scrollY = window.pageYOffset || document.documentElement.scrollTop;
     
+    // Add viewport dimensions and device pixel ratio
+    const viewport_width = window.innerWidth;
+    const viewport_height = window.innerHeight;
+    const device_pixel_ratio = window.devicePixelRatio || 1.0;
+    
+    // Get iframe offsets if the element is in an iframe
+    let iframe_offset_x = 0;
+    let iframe_offset_y = 0;
+    
+    // If we're in an iframe, calculate the offset
+    if (window !== window.parent) {
+      try {
+        const frameElement = window.frameElement;
+        if (frameElement) {
+          const frameRect = frameElement.getBoundingClientRect();
+          iframe_offset_x = frameRect.left;
+          iframe_offset_y = frameRect.top;
+        }
+      } catch (e) {
+        // Cross-origin iframe access might fail
+        console.warn('Could not access iframe element for offset calculation');
+      }
+    }
+    
     return {
-      x: Math.round(rect.left + scrollX),  // Absolute X on the page
-      y: Math.round(rect.top + scrollY),   // Absolute Y on the page
+      x: Math.round(rect.left + scrollX),
+      y: Math.round(rect.top + scrollY),
       width: Math.round(rect.width),
       height: Math.round(rect.height),
-      highlight_index: highlightIdx
+      highlight_index: highlightIdx,
+      // Add the additional information needed by the Python highlighter
+      scroll_x: scrollX,
+      scroll_y: scrollY,
+      viewport_width: viewport_width,
+      viewport_height: viewport_height,
+      device_pixel_ratio: device_pixel_ratio,
+      iframe_offset_x: iframe_offset_x,
+      iframe_offset_y: iframe_offset_y
     };
   }
 
