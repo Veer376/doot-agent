@@ -4,6 +4,7 @@ from urllib.parse import urlparse
 from typing import Any, Callable, TYPE_CHECKING
 from pydantic import BaseModel, create_model
 from logging_utils import get_agent_logger
+from .types import FilterContext
 
 # Use forward references
 if TYPE_CHECKING:
@@ -13,18 +14,6 @@ if TYPE_CHECKING:
     from playwright.async_api import Page
 
 logger = get_agent_logger("tool_registry")
-
-
-class FilterContext(BaseModel):
-    """
-    A data class holding all contextual information for filtering rules.
-    """
-
-    domain: str | None = None
-    step: int | None = None
-    last_action: str | None = None
-    text_field_focused: bool = False
-    reserved_tools: list[str] = []  # Tools reserved for the next turn only.
 
 
 class ToolRegistry:
