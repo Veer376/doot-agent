@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING, Optional, Dict
 
 if TYPE_CHECKING:
     from playwright.async_api import Page, ElementHandle
-    from .dom.types import DOMElementNode
+    from .dom.types import DOMElementNode, BoundingBox
 
 
 class Animator:
@@ -25,23 +25,30 @@ class Animator:
         (() => {
             // Setup styles and cursor
             if (window.playwrightAnimationsSetup) return;
+            
             const styles = `
-                #playwright-cursor { position: absolute; pointer-events: none; z-index: 2147483647; transition: top 0.15s cubic-bezier(0.65, 0, 0.35, 1), left 0.15s cubic-bezier(0.65, 0, 0.35, 1); }
+                #playwright-cursor { position: fixed; pointer-events: none; z-index: 2147483647; transition: top 0.15s cubic-bezier(0.65, 0, 0.35, 1), left 0.15s cubic-bezier(0.65, 0, 0.35, 1); }
                 .playwright-cursor-icon { width: 27px; height: 27px; background-repeat: no-repeat; background-size: contain; transform: translate(-50%, -50%); filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5)); display: none; }
-                #playwright-cursor-pointer-icon { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 24 24'%3E%3Cpath fill='black' stroke='white' stroke-width='1.5' d='M5.5 3.21V20.8c0 .45.54.67.85.35l4.86-4.86a.5.5 0 0 1 .35-.15h6.87a.5.5 0 0 0 .35-.85L6.35 2.85a.5.5 0 0 0-.85.35Z'/%3E%3C/svg%3E"); }
+                #playwright-cursor-pointer-icon { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 24 24'%3E%3Cpath fill='black' stroke='black' stroke-width='2' d='M5.5 3.21V20.8c0 .45.54.67.85.35l4.86-4.86a.5.5 0 0 1 .35-.15h6.87a.5.5 0 0 0 .35-.85L6.35 2.85a.5.5 0 0 0-.85.35Z'/%3E%3C/svg%3E"); }
                 #playwright-cursor-text-icon { width: 2px; height: 22px; background-color: black; animation: blink 1s infinite; filter: none; }
                 #playwright-cursor-scroll-icon { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M12 2L9 6h6l-3-4zm0 20l3-4H9l3 4zm8-10l-4 3v-6l4 3zM4 12l4-3v6l-4-3z'/%3E%3C/svg%3E"); }
                 #playwright-cursor-key-icon { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M20 5H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm-9 11H5v-2h6v2zm0-3H5V9h6v2zm7 3h-6v-2h6v2zm0-3h-6V9h6v2z'/%3E%3C/svg%3E"); }
-                #playwright-cursor-info-icon { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z'/%3E%3C/svg%3E"); }
+                .log-icon-info { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z'/%3E%3C/svg%3E"); }
+                .log-icon-debug { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M20,8h-2.81c-.45-1.77-2.1-3-4.19-3s-3.74,1.23-4.19,3H6v6h2.09c.05.33.12.65.21,1H6v2h2.3c.2,1.22,1.14,2,2.7,2s2.5-0.78,2.7-2H16v-2h-2.29c.09-.35.16-.67.21-1H16V8z M12,16c-0.83,0-1.5-0.67-1.5-1.5S11.17,13,12,13s1.5,0.67,1.5,1.5S12.83,16,12,16z M13.5,10h-3V8.5C10.5,7.67,11.17,7,12,7s1.5,0.67,1.5,1.5V10z'/%3E%3C/svg%3E"); }
+                .log-icon-warning { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z'/%3E%3C/svg%3E"); }
+                .log-icon-error { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M12 2C6.47 2 2 6.47 2 12s4.47 10 10 10 10-4.47 10-10S17.53 2 12 2zm5 13.59L15.59 17 12 13.41 8.41 17 7 15.59 10.59 12 7 8.41 8.41 7 12 10.59 15.59 7 17 8.41 13.41 12 17 15.59z'/%3E%3C/svg%3E"); }
                 #playwright-cursor-processing-icon { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='none' stroke='white' stroke-width='3' stroke-linecap='round' d='M12 2a10 10 0 1 0 10 10'/%3E%3Cpath fill='black' stroke='black' stroke-width='3' stroke-linecap='round' d='M12 2a10 10 0 0 0-7.07 2.93'/%3E%3C/svg%3E"); animation: rotate 1s linear infinite; }
+                #playwright-cursor-dropdown-icon { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E"); transition: transform 0.3s ease-in-out; }
+                .cursor-dropdown-open #playwright-cursor-dropdown-icon { transform: translate(-50%, -50%) rotate(180deg); }
                 @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
                 @keyframes rotate { from { transform: translate(-50%, -50%) rotate(0deg); } to { transform: translate(-50%, -50%) rotate(360deg); } }
                 .cursor-click-down #playwright-cursor-pointer-icon, .cursor-key-press #playwright-cursor-key-icon { animation: press-effect 0.2s cubic-bezier(0.250, 0.460, 0.450, 0.940) forwards; }
                 @keyframes press-effect { 0% { transform: translate(-50%, -50%) scale(1); } 50% { transform: translate(-50%, -50%) scale(0.5); } 100% { transform: translate(-50%, -50%) scale(1); } }
                 .icon-fade-in { animation: fade-in 0.3s ease-out forwards; }
                 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
-                #playwright-cursor-textbox { position: absolute; top: 10px; left: 10px; background: rgba(255, 255, 255, 0); border-radius: 16px; box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid rgba(255, 255, 255, 0.39); color: black; padding: 6px 12px; font-family: 'Quicksand', sans-serif; font-size: 14px; font-weight: 500; transition: all 0.3s ease-out; max-width: 375px; word-wrap: break-word; opacity: 0; transform: translateY(-10px); }
+                #playwright-cursor-textbox { position: absolute; background: rgba(255, 255, 255, 0.2); border-radius: 12px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.3); color: #333; padding: 6px 12px; font-family: 'Quicksand', sans-serif; font-size: 14px; font-weight: 500; transition: all 0.3s ease-out; max-width: 375px; word-wrap: break-word; opacity: 0; }
                 .textbox-appear { opacity: 1 !important; transform: translateY(0) !important; }
+                .playwright-cursor-label { position: absolute; top: 10px; left: 10px; background: rgba(255, 255, 255, 0.2); border-radius: 12px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.3); color: #333; padding: 4px 8px; font-family: 'Quicksand', sans-serif; font-size: 12px; font-weight: 500; }
                 .splash-line { position: absolute; width: 3.5px; pointer-events: none; background-color: #2d3748; border-radius: 9999px; transform-origin: top center; z-index: 2147483646; animation: line-clip-and-retract 0.4s cubic-bezier(0.5, 1, 0.9, 1) forwards; }
                 @keyframes line-clip-and-retract { 0% { clip-path: inset(0 0 100% 0); } 30% { clip-path: inset(0 0 0 0); } 100% { clip-path: inset(100% 0 0 0); } }
                 .scroll-indicator { position: absolute; z-index: 2147483646; width: 10px; height: 30px; transform: translateX(-50%); }
@@ -99,7 +106,7 @@ class Animator:
                 .mock-browser { position: relative; width: 100%; height: 100%; border-radius: 10px; background: transparent; overflow: hidden; }
                 .mock-browser-header { height: 20px; background: linear-gradient(180deg, #f1f5f9 0%, #e2e8f0 100%); border-bottom: 1px solid #cbd5e1; display: flex; align-items: center; padding: 0 8px; justify-content: space-between; }
                 .mock-url-bar { flex-grow: 1; height: 12px; background: white; border: 1px solid #cbd5e1; border-radius: 6px; margin: 0 4px; position: relative; font-size: 6px; display: flex; align-items: center; padding: 0 4px; color: #64748b; }
-                .mock-url-bar::before { content: "🔒 example.com/dashboard"; font-size: 5px; }
+                .mock-url-bar::before { content: "🔒 agnet.com/profiles"; font-size: 5px; }
                 .mock-close-buttons { display: flex; gap: 2px; }
                 .mock-close-btn { width: 6px; height: 6px; border-radius: 50%; }
                 .mock-close-btn.red { background: #ef4444; }
@@ -108,10 +115,15 @@ class Animator:
                 
                 .mock-content { padding: 8px; height: calc(100% - 20px); background: transparent; position: relative; }
                 
-                .mock-profile {
+                .mock-profile-container {
                     position: absolute;
                     top: 4px;
                     left: 6px;
+                    display: flex;
+                    align-items: center;
+                    gap: 6px;
+                }
+                .mock-profile {
                     width: 18px;
                     height: 18px;
                     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2'%3E%3C/path%3E%3Ccircle cx='12' cy='7' r='4'%3E%3C/circle%3E%3C/svg%3E");
@@ -120,6 +132,12 @@ class Animator:
                     background-repeat: no-repeat;
                     border: 1.5px solid #6b7280;
                     border-radius: 50%;
+                }
+                .mock-profile-name {
+                    font-size: 10px;
+                    font-weight: 500;
+                    font-family: 'Quicksand', sans-serif;
+                    color: #4a5568;
                 }
                 
                 .mock-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 24px; height: calc(100% - 32px); }
@@ -134,83 +152,14 @@ class Animator:
                     padding: 6px; 
                     position: relative;
                 }
-
-                .mock-image { 
-                    width: 100%; 
-                    height: 16px; 
-                    background: transparent; 
-                    border-radius: 4px; 
-                    position: relative; 
-                    overflow: hidden; 
-                    margin-bottom: 8px;
-                    border: none;
-                }
                 
-                /* Sun */
-                .mock-image::before { 
-                    content: ""; 
-                    position: absolute; 
-                    top: 3px; 
-                    right: 5px; 
-                    width: 6px; 
-                    height: 6px; 
-                    background: #9ca3af; 
-                    border-radius: 50%; 
-                    border: 1px solid #6b7280;
-                }
-                
-                /* Mountains */
-                .mock-image::after { 
-                    content: ""; 
-                    position: absolute; 
-                    bottom: 0; 
-                    left: 0; 
-                    width: 100%; 
-                    height: 10px; 
-                    background: linear-gradient(45deg, transparent 30%, #9ca3af 30%, #9ca3af 50%, #6b7280 50%, #6b7280 70%, transparent 70%);
-                    clip-path: polygon(0 100%, 20% 30%, 40% 60%, 60% 20%, 80% 50%, 100% 40%, 100% 100%);
-                }
-                
-                /* Clouds */
-                .mock-cloud { 
-                    position: absolute; 
-                    top: 4px; 
-                    left: 6px; 
-                    width: 10px; 
-                    height: 3px; 
-                    background: #d1d5db; 
-                    border-radius: 6px; 
-                    opacity: 0.8;
-                }
-                .mock-cloud::before { 
-                    content: ""; 
-                    position: absolute; 
-                    top: -1px; 
-                    left: 2px; 
-                    width: 2px; 
-                    height: 2px; 
-                    background: #d1d5db; 
-                    border-radius: 50%; 
-                }
-                .mock-cloud::after { 
-                    content: ""; 
-                    position: absolute; 
-                    top: -1px; 
-                    right: 1px; 
-                    width: 2px; 
-                    height: 2px; 
-                    background: #d1d5db; 
-                    border-radius: 50%; 
-                }
-                
-                .mock-lines { display: flex; flex-direction: column; gap: 2px; }
+                .mock-lines { display: flex; flex-direction: column; gap: 2px; width: 90%;}
                 .mock-line { 
                     height: 4px; 
-                    background: #cbd5e1; 
                     border-radius: 2px;
                     position: relative;
                     overflow: hidden;
-                    background-color: #e2e8f0;
+                    background-color: #cbd5e1;
                 }
                 .mock-line::after {
                     content: '';
@@ -226,10 +175,133 @@ class Animator:
                 .mock-line:nth-child(2) { width: 70%; animation-delay: 0.2s; }
                 .mock-line:nth-child(3) { width: 85%; animation-delay: 0.4s; }
 
+                .glass-card {
+                    width: 80px;
+                    height: 30px;
+                    background: rgba(255, 255, 255, 0.15);
+                    backdrop-filter: blur(7px);
+                    -webkit-backdrop-filter: blur(7px);
+                    border-radius: 10px;
+                    border: 1px solid rgba(255, 255, 255, 0.3);
+                    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1),
+                                inset 0 1px 0 rgba(255, 255, 255, 0.5),
+                                inset 0 -1px 0 rgba(255, 255, 255, 0.1),
+                                inset 0 0 20px 10px rgba(255, 255, 255, 1);
+                    position: absolute;
+                    bottom: 10px;
+                    right: 10px;
+                    overflow: hidden;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    color: black;
+                    font-weight: 500;
+                    font-family: 'Quicksand';
+                    font-size: 10px;
+                    cursor: pointer;
+                    transition: all 0.2s ease-in-out;
+                }
+
+                .glass-card::before {
+                    content: '';
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    height: 1px;
+                    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.8), transparent);
+                }
+
+                .glass-card::after {
+                    content: '';
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    width: 1px;
+                    height: 100%;
+                    background: linear-gradient(180deg, rgba(255, 255, 255, 0.8), transparent, rgba(255, 255, 255, 0.3));
+                }
                 @keyframes shimmer {
                     0% { transform: translateX(-100%); }
                     100% { transform: translateX(100%); }
                 }
+
+                /* New Stunning Design CSS */
+                .sky { position: absolute; top: 0; left: 0; width: 100%; height: 70%; background: linear-gradient(to bottom, #e8e8e8 0%, #d0d0d0 30%, #c0c0c0 70%, #b0b0b0 100%); }
+                .sun { position: absolute; top: 15%; right: 15%; width: 15px; height: 15px; background: radial-gradient(circle, #fffde7 30%, #fff9c4 70%); border-radius: 50%; box-shadow: 0 0 10px rgba(255, 255, 224, 0.6); animation: glow 3s ease-in-out infinite alternate; }
+                @keyframes glow { from { box-shadow: 0 0 10px rgba(255, 255, 224, 0.6); } to { box-shadow: 0 0 15px rgba(255, 255, 224, 0.9); } }
+                .mountain { position: absolute; bottom: 30%; }
+                .mountain-1 { left: 10%; width: 0; height: 0; border-left: 8px solid transparent; border-right: 8px solid transparent; border-bottom: 13px solid #404040; }
+                .mountain-1::after { content: ''; position: absolute; top: 0; left: -4px; width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-bottom: 6.5px solid #ffffff; }
+                .mountain-2 { left: 35%; width: 0; height: 0; border-left: 10px solid transparent; border-right: 10px solid transparent; border-bottom: 15px solid #505050; }
+                .mountain-2::after { content: ''; position: absolute; top: 0; left: -5px; width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-bottom: 7.5px solid #ffffff; }
+                .mountain-3 { right: 10%; width: 0; height: 0; border-left: 7.5px solid transparent; border-right: 7.5px solid transparent; border-bottom: 10px solid #454545; }
+                .mountain-3::after { content: ''; position: absolute; top: 0; left: -3.75px; width: 0; height: 0; border-left: 3.75px solid transparent; border-right: 3.75px solid transparent; border-bottom: 5px solid #ffffff; }
+                .cloud { position: absolute; background: rgba(255, 255, 255, 0.9); border-radius: 100px; }
+                .cloud-1 { top: 10%; left: 20%; width: 20px; height: 7px; animation: float 6s ease-in-out infinite; }
+                .cloud-1::before { content: ''; position: absolute; top: -4px; left: 2px; width: 12px; height: 12px; background: rgba(255, 255, 255, 0.9); border-radius: 50%; }
+                .cloud-1::after { content: ''; position: absolute; top: -2px; right: 2px; width: 10px; height: 10px; background: rgba(255, 255, 255, 0.9); border-radius: 50%; }
+                .cloud-2 { top: 20%; right: 30%; width: 15px; height: 6px; animation: float 8s ease-in-out infinite reverse; }
+                .cloud-2::before { content: ''; position: absolute; top: -3px; left: 2px; width: 10px; height: 10px; background: rgba(255, 255, 255, 0.9); border-radius: 50%; }
+                .cloud-2::after { content: ''; position: absolute; top: -2px; right: 2px; width: 8px; height: 8px; background: rgba(255, 255, 255, 0.9); border-radius: 50%; }
+                @keyframes float { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-5.2px); } }
+                .bird { position: absolute; top: 25%; left: 50%; width: 5px; height: 1px; background: #000; border-radius: 50%; animation: fly 4s linear infinite; }
+                .bird::before { content: ''; position: absolute; left: -2px; top: 0; width: 3px; height: 1px; background: #000; border-radius: 50%; transform: rotate(-20deg); }
+                .bird::after { content: ''; position: absolute; right: -2px; top: 0; width: 3px; height: 1px; background: #000; border-radius: 50%; transform: rotate(20deg); }
+                .bird-2 { animation-delay: -2s; left: 55%; top: 20%; }
+                .bird-3 { animation-delay: -1s; left: 45%; top: 30%; }
+                @keyframes fly { 0% { transform: translateX(-15px) translateY(0); } 25% { transform: translateX(0) translateY(-3px); } 50% { transform: translateX(15px) translateY(0); } 75% { transform: translateX(25px) translateY(3px); } 100% { transform: translateX(40px) translateY(0); } }
+
+                /* New Log Container Styles */
+                #playwright-log-container {
+                    position: fixed;
+                    bottom: 20px;
+                    right: 20px;
+                    z-index: 2147483646;
+                    display: flex;
+                    flex-direction: column-reverse;
+                    align-items: flex-end;
+                    gap: 10px;
+                    pointer-events: none;
+                }
+                .playwright-log-entry {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    background: rgba(255, 255, 255, 0.2);
+                    border-radius: 12px;
+                    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+                    backdrop-filter: blur(10px);
+                    -webkit-backdrop-filter: blur(10px);
+                    border: 1px solid rgba(255, 255, 255, 0.3);
+                    color: #333;
+                    padding: 8px 12px;
+                    font-family: 'Quicksand', sans-serif;
+                    font-size: 14px;
+                    font-weight: 500;
+                    max-width: 375px;
+                    word-wrap: break-word;
+                    animation: log-fade-in 0.3s ease-out forwards;
+                }
+                .playwright-log-entry.fade-out {
+                    animation: log-fade-out 0.5s ease-in forwards;
+                }
+                .log-icon {
+                    width: 20px;
+                    height: 20px;
+                    background-size: contain;
+                    background-repeat: no-repeat;
+                    flex-shrink: 0;
+                }
+                @keyframes log-fade-in {
+                    from { opacity: 0; transform: translateX(20px); }
+                    to { opacity: 1; transform: translateX(0); }
+                }
+                @keyframes log-fade-out {
+                    from { opacity: 1; transform: translateX(0); }
+                    to { opacity: 0; transform: translateX(20px); }
+                }
+
             `;
             const styleSheet = document.createElement("style");
             styleSheet.id = 'pointer-animation-styles';
@@ -238,7 +310,7 @@ class Animator:
 
             const cursor = document.createElement('div');
             cursor.id = 'playwright-cursor';
-            ['pointer', 'text', 'scroll', 'key', 'info', 'processing'].forEach(iconType => {
+            ['pointer', 'text', 'scroll', 'key', 'processing', 'dropdown'].forEach(iconType => {
                 const iconEl = document.createElement('div');
                 iconEl.id = `playwright-cursor-${iconType}-icon`;
                 iconEl.className = 'playwright-cursor-icon';
@@ -248,34 +320,101 @@ class Animator:
             cursor.style.top = '-100px';
             document.body.appendChild(cursor);
 
+            // Create log container if it doesn't exist
+            if (!document.getElementById('playwright-log-container')) {
+                const newLogContainer = document.createElement('div');
+                newLogContainer.id = 'playwright-log-container';
+                document.body.appendChild(newLogContainer);
+            }
+
             window.playwrightAnimationsSetup = true;
             window.playwrightTimers = new Set();
             window.screenshotTimers = new Set();
+            let textBoxElement = null;
 
-            window.stop_all_animations = () => {
-                window.playwrightTimers.forEach(timer => clearTimeout(timer));
-                window.playwrightTimers.clear();
-                window.screenshotTimers.forEach(timer => clearTimeout(timer));
-                window.screenshotTimers.clear();
-
-                document.querySelectorAll('#playwright-cursor, #screenshot-flash, #screenshot-thumbnail, .splash-line, .scroll-indicator').forEach(el => el.remove());
-                
-                // Re-create cursor for next run
-                const newCursor = document.createElement('div');
-                newCursor.id = 'playwright-cursor';
-                ['pointer', 'text', 'scroll', 'key', 'info', 'processing'].forEach(iconType => {
-                    const iconEl = document.createElement('div');
-                    iconEl.id = `playwright-cursor-${iconType}-icon`;
-                    iconEl.className = 'playwright-cursor-icon';
-                    newCursor.appendChild(iconEl);
+            window.hide_animations = () => {
+                document.querySelectorAll('#playwright-cursor, #screenshot-flash, #screenshot-thumbnail, .splash-line, .scroll-indicator, #playwright-log-container').forEach(el => {
+                    if (el) el.style.display = 'none';
                 });
-                newCursor.style.left = '-100px';
-                newCursor.style.top = '-100px';
-                document.body.appendChild(newCursor);
             };
+
+            window.show_animations = () => {
+                document.querySelectorAll('#playwright-cursor, #screenshot-flash, #screenshot-thumbnail, .splash-line, .scroll-indicator, #playwright-log-container').forEach(el => {
+                    if (el) el.style.display = ''; // Revert to default display
+                });
+            };
+
+            function updateDisplay(text, iconType) {
+                if (!textBoxElement) {
+                    textBoxElement = document.createElement('div');
+                    textBoxElement.id = 'playwright-cursor-textbox';
+                    cursor.appendChild(textBoxElement);
+                }
+                
+                textBoxElement.innerHTML = text;
+                textBoxElement.classList.add('textbox-appear');
+
+                document.querySelectorAll('.playwright-cursor-icon').forEach(icon => icon.style.display = 'none');
+                const activeIcon = document.getElementById(`playwright-cursor-${iconType}-icon`) || document.getElementById('playwright-cursor-pointer-icon');
+                if (activeIcon) activeIcon.style.display = 'block';
+
+                // --- START OF NEW POSITIONING LOGIC ---
+                // Reset styles
+                textBoxElement.style.top = '';
+                textBoxElement.style.left = '';
+                textBoxElement.style.bottom = '';
+                textBoxElement.style.right = '';
+                textBoxElement.style.transform = '';
+
+                // Temporarily make it visible but off-screen to measure
+                textBoxElement.style.visibility = 'hidden';
+                document.body.appendChild(textBoxElement); // Append to body for accurate measurement
+                const boxRect = textBoxElement.getBoundingClientRect();
+                cursor.appendChild(textBoxElement); // Move it back
+                
+                const endX = parseFloat(cursor.style.left);
+                const endY = parseFloat(cursor.style.top);
+                const viewportWidth = window.innerWidth;
+                const viewportHeight = window.innerHeight;
+                const margin = 10;
+
+                const canGoRight = endX + margin + boxRect.width < viewportWidth;
+                const canGoLeft = endX - margin - boxRect.width > 0;
+                const canGoDown = endY + margin + boxRect.height < viewportHeight;
+                const canGoUp = endY - margin - boxRect.height > 0;
+
+                // Priority 1: Bottom-Right
+                if (canGoDown && canGoRight) {
+                    textBoxElement.style.top = `${margin}px`;
+                    textBoxElement.style.left = `${margin}px`;
+                    textBoxElement.style.transform = 'translateY(-10px)';
+                } 
+                // Priority 2: Bottom-Left
+                else if (canGoDown && canGoLeft) {
+                    textBoxElement.style.top = `${margin}px`;
+                    textBoxElement.style.left = `-${boxRect.width + margin}px`;
+                    textBoxElement.style.transform = 'translateY(-10px)';
+                } 
+                // Priority 3: Top-Right
+                else if (canGoUp && canGoRight) {
+                    textBoxElement.style.top = `-${boxRect.height + margin}px`;
+                    textBoxElement.style.left = `${margin}px`;
+                    textBoxElement.style.transform = 'translateY(10px)';
+                } 
+                // Priority 4: Top-Left (Default)
+                else {
+                    textBoxElement.style.top = `-${boxRect.height + margin}px`;
+                    textBoxElement.style.left = `-${boxRect.width + margin}px`;
+                    textBoxElement.style.transform = 'translateY(10px)';
+                }
+                
+                textBoxElement.style.visibility = 'visible';
+                 // --- END OF NEW POSITIONING LOGIC ---
+            }
             
             // --- Screenshot Animation Function ---
             window.run_screenshot_animation = async (params = {}) => {
+                window.show_animations();
                 const { sound_effect = false } = params;
 
                 // Clear only screenshot timers
@@ -290,114 +429,70 @@ class Animator:
                 const thumbnailElement = document.createElement('div');
                 thumbnailElement.id = 'screenshot-thumbnail';
                 
-                // Create elements programmatically instead of using innerHTML to avoid TrustedHTML issues
-                const mockBrowser = document.createElement('div');
-                mockBrowser.className = 'mock-browser';
-                
-                const mockBrowserHeader = document.createElement('div');
-                mockBrowserHeader.className = 'mock-browser-header';
-                
-                const mockCloseButtons = document.createElement('div');
-                mockCloseButtons.className = 'mock-close-buttons';
-                
-                const mockRedBtn = document.createElement('div');
-                mockRedBtn.className = 'mock-close-btn red';
-                
-                const mockYellowBtn = document.createElement('div');
-                mockYellowBtn.className = 'mock-close-btn yellow';
-                
-                const mockGreenBtn = document.createElement('div');
-                mockGreenBtn.className = 'mock-close-btn green';
-                
-                const mockUrlBar = document.createElement('div');
-                mockUrlBar.className = 'mock-url-bar';
-                
-                // Assemble header
-                mockCloseButtons.appendChild(mockRedBtn);
-                mockCloseButtons.appendChild(mockYellowBtn);
-                mockCloseButtons.appendChild(mockGreenBtn);
-                mockBrowserHeader.appendChild(mockCloseButtons);
-                mockBrowserHeader.appendChild(mockUrlBar);
-                
-                // Create content
-                const mockContent = document.createElement('div');
-                mockContent.className = 'mock-content';
-                
-                const mockProfile = document.createElement('div');
-                mockProfile.className = 'mock-profile';
-                
-                const mockGrid = document.createElement('div');
-                mockGrid.className = 'mock-grid';
-                
-                // Create first card
-                const mockCard1 = document.createElement('div');
-                mockCard1.className = 'mock-card';
-                
-                const mockImage1 = document.createElement('div');
-                mockImage1.className = 'mock-image';
-                
-                const mockCloud1 = document.createElement('div');
-                mockCloud1.className = 'mock-cloud';
-                
-                const mockLines1 = document.createElement('div');
-                mockLines1.className = 'mock-lines';
-                
-                for (let i = 0; i < 3; i++) {
-                    const mockLine = document.createElement('div');
-                    mockLine.className = 'mock-line';
-                    mockLines1.appendChild(mockLine);
-                }
-                
-                // Assemble first card
-                mockImage1.appendChild(mockCloud1);
-                mockCard1.appendChild(mockImage1);
-                mockCard1.appendChild(mockLines1);
-                
-                // Create second card (duplicate of first)
-                const mockCard2 = document.createElement('div');
-                mockCard2.className = 'mock-card';
-                
-                const mockImage2 = document.createElement('div');
-                mockImage2.className = 'mock-image';
-                
-                const mockCloud2 = document.createElement('div');
-                mockCloud2.className = 'mock-cloud';
-                
-                const mockLines2 = document.createElement('div');
-                mockLines2.className = 'mock-lines';
-                
-                for (let i = 0; i < 3; i++) {
-                    const mockLine = document.createElement('div');
-                    mockLine.className = 'mock-line';
-                    mockLines2.appendChild(mockLine);
-                }
-                
-                // Assemble second card
-                mockImage2.appendChild(mockCloud2);
-                mockCard2.appendChild(mockImage2);
-                mockCard2.appendChild(mockLines2);
-                
-                // Add cards to grid
-                mockGrid.appendChild(mockCard1);
-                mockGrid.appendChild(mockCard2);
-                
-                // Create capture button
-                const mockCaptureButton = document.createElement('div');
-                mockCaptureButton.id = 'mock-capture-button';
-                mockCaptureButton.className = 'glass-card';
-                mockCaptureButton.textContent = 'Captured';
-                
-                // Assemble content
-                mockContent.appendChild(mockProfile);
-                mockContent.appendChild(mockGrid);
-                mockContent.appendChild(mockCaptureButton);
-                
-                // Assemble browser
-                mockBrowser.appendChild(mockBrowserHeader);
-                mockBrowser.appendChild(mockContent);
-                
-                // Add to thumbnail
-                thumbnailElement.appendChild(mockBrowser);
+                thumbnailElement.innerHTML = `
+                    <div class="mock-browser">
+                        <div class="mock-browser-header">
+                            <div class="mock-close-buttons">
+                                <div class="mock-close-btn red"></div>
+                                <div class="mock-close-btn yellow"></div>
+                                <div class="mock-close-btn green"></div>
+                            </div>
+                            <div class="mock-url-bar"></div>
+                        </div>
+                        <div class="mock-content">
+                             <div class="mock-profile-container">
+                                <div class="mock-profile"></div>
+                                <div class="mock-profile-name">Veer</div>
+                            </div>
+                            <div class="mock-grid">
+                                <div style="display: flex; flex-direction: column; gap: 4px; justify-content: space-between;">
+                                    <div class="mock-card" style="flex-grow: 1; display: flex; align-items: center; justify-content: center;">
+                                        <div class="mock-lines">
+                                            <div class="mock-line" style="width: 80%"></div>
+                                            <div class="mock-line" style="width: 60%"></div>
+                                        </div>
+                                    </div>
+                                    <div class="mock-card" style="flex-grow: 1; display: flex; align-items: center; justify-content: center;">
+                                        <div class="mock-lines" style="gap: 3.2px;">
+                                            <div class="mock-line" style="width: 75%"></div>
+                                            <div class="mock-line" style="width: 90%"></div>
+                                            <div class="mock-line" style="width: 60%"></div>
+                                            <div class="mock-line" style="width: 80%"></div>
+                                        </div>
+                                    </div>
+                                    <div class="mock-card" style="flex-grow: 0.7; display: flex; align-items: center; justify-content: center;">
+                                        <div class="mock-lines">
+                                            <div class="mock-line" style="width: 65%"></div>
+                                            <div class="mock-line" style="width: 50%"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="mock-card" style="display: flex; flex-direction: column; justify-content: flex-start; padding: 0;">
+                                    <div style="height: 50%; position: relative; overflow: hidden; border-radius: 4px 4px 0 0;">
+                                        <div class="sky"></div>
+                                        <div class="sun"></div>
+                                        <div class="mountain mountain-1"></div>
+                                        <div class="mountain mountain-2"></div>
+                                        <div class="mountain mountain-3"></div>
+                                        <div class="cloud cloud-1"></div>
+                                        <div class="cloud cloud-2"></div>
+                                        <div class="bird bird-1"></div>
+                                        <div class="bird bird-2"></div>
+                                        <div class="bird bird-3"></div>
+                                    </div>
+                                    <div style="height: 50%; display: flex; align-items: center; justify-content: center;">
+                                        <div class="mock-lines">
+                                            <div class="mock-line"></div>
+                                            <div class="mock-line"></div>
+                                            <div class="mock-line"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div id="mock-capture-button" class="glass-card">snapshot</div>
+                        </div>
+                    </div>
+                `;
                 
                 document.body.appendChild(thumbnailElement);
 
@@ -430,23 +525,54 @@ class Animator:
                 window.screenshotTimers.add(timer3);
             };
 
+            // --- New Logging Function ---
+            window.createLogEntry = (params) => {
+                const {text, level = 'info'} = params
+                let logContainer = document.getElementById('playwright-log-container');
+                if (!logContainer) {
+                    logContainer = document.createElement('div');
+                    logContainer.id = 'playwright-log-container';
+                    document.body.appendChild(logContainer);
+                }
+
+                const logEntry = document.createElement('div');
+                logEntry.className = 'playwright-log-entry';
+                
+                const icon = document.createElement('div');
+                icon.className = `log-icon log-icon-${level}`;
+                
+                const textNode = document.createElement('span');
+                textNode.textContent = text;
+                
+                logEntry.appendChild(icon);
+                logEntry.appendChild(textNode);
+                logContainer.prepend(logEntry);
+
+                setTimeout(() => {
+                    logEntry.classList.add('fade-out');
+                    logEntry.addEventListener('animationend', () => {
+                        logEntry.remove();
+                    });
+                }, 5000);
+            };
+
             // --- Main Cursor Animation Function ---
             window.run_animation = async (params = {}) => {
+                window.show_animations();
                 const { coords, action = {}, text } = params;
                 const { type, direction } = action;
 
                 // Clear only main cursor timers
                 window.playwrightTimers.forEach(timer => clearTimeout(timer));
                 window.playwrightTimers.clear();
-                document.querySelectorAll('#playwright-cursor-textbox, .splash-line, .scroll-indicator').forEach(el => el.remove());
+                document.querySelectorAll('.splash-line, .scroll-indicator').forEach(el => el.remove());
 
                 const cursor = document.getElementById('playwright-cursor');
                 if (!cursor) { console.error("Cursor element not found."); return; }
+                cursor.style.display = 'block';
 
-                document.querySelectorAll('.playwright-cursor-icon').forEach(icon => icon.style.display = 'none');
-                const activeIcon = document.getElementById(`playwright-cursor-${type}-icon`) || document.getElementById('playwright-cursor-pointer-icon');
-                if (activeIcon) activeIcon.style.display = 'block';
-
+                let iconType = type;
+                
                 let endX, endY;
 
                 if (coords) {
@@ -462,17 +588,6 @@ class Animator:
                         // Default to center if no last position is known
                         endX = window.innerWidth / 2;
                         endY = window.innerHeight / 2;
-                    }
-                }
-
-
-                function typeText(textBox, fullText, callback) {
-                    // Set text content instead of innerHTML to avoid TrustedHTML issues
-                    textBox.textContent = fullText;
-                    textBox.classList.add('textbox-appear');
-                    if (callback) {
-                        const timer = setTimeout(callback, 300);
-                        window.playwrightTimers.add(timer);
                     }
                 }
 
@@ -511,49 +626,14 @@ class Animator:
                         indicator.style.left = `${endX}px`;
                         indicator.style.top = `${endY}px`;
                         indicator.style.animation = `scroll-${direction} 0.4s ease-out forwards`;
-                        // Create SVG programmatically instead of using innerHTML
-                        const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-                        svg.setAttribute("width", "10");
-                        svg.setAttribute("height", "30");
-                        svg.setAttribute("viewBox", "0 0 10 30");
-                        
-                        if (direction === 'down') {
-                            const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-                            line.setAttribute("x1", "5");
-                            line.setAttribute("y1", "0");
-                            line.setAttribute("x2", "5");
-                            line.setAttribute("y2", "20");
-                            line.setAttribute("stroke", "rgba(0,0,0,0.4)");
-                            line.setAttribute("stroke-width", "4");
-                            line.setAttribute("stroke-linecap", "round");
-                            
-                            const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-                            path.setAttribute("d", "M0 20 L5 30 L10 20 Z");
-                            path.setAttribute("fill", "rgba(0,0,0,0.4)");
-                            
-                            svg.appendChild(line);
-                            svg.appendChild(path);
-                        } else if (direction === 'up') {
-                            const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-                            path.setAttribute("d", "M0 10 L5 0 L10 10 Z");
-                            path.setAttribute("fill", "rgba(0,0,0,0.4)");
-                            
-                            const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-                            line.setAttribute("x1", "5");
-                            line.setAttribute("y1", "10");
-                            line.setAttribute("x2", "5");
-                            line.setAttribute("y2", "30");
-                            line.setAttribute("stroke", "rgba(0,0,0,0.4)");
-                            line.setAttribute("stroke-width", "4");
-                            line.setAttribute("stroke-linecap", "round");
-                            
-                            svg.appendChild(path);
-                            svg.appendChild(line);
-                        }
-                        
-                        indicator.appendChild(svg);
+                        if (direction === 'down') indicator.innerHTML = `<svg width="10" height="30" viewBox="0 0 10 30"><line x1="5" y1="0" x2="5" y2="20" stroke="rgba(0,0,0,0.4)" stroke-width="4" stroke-linecap="round"/><path d="M0 20 L5 30 L10 20 Z" fill="rgba(0,0,0,0.4)"/></svg>`;
+                        else if (direction === 'up') indicator.innerHTML = `<svg width="10" height="30" viewBox="0 0 10 30"><path d="M0 10 L5 0 L10 10 Z" fill="rgba(0,0,0,0.4)"/><line x1="5" y1="10" x2="5" y2="30" stroke="rgba(0,0,0,0.4)" stroke-width="4" stroke-linecap="round"/></svg>`;
                         document.body.appendChild(indicator);
                         const timer = setTimeout(() => indicator.remove(), 400);
+                        window.playwrightTimers.add(timer);
+                    } else if (type === 'dropdown') {
+                        cursor.classList.add('cursor-dropdown-open');
+                        const timer = setTimeout(() => cursor.classList.remove('cursor-dropdown-open'), 500);
                         window.playwrightTimers.add(timer);
                     }
                 }
@@ -561,29 +641,13 @@ class Animator:
                 function onCursorArrival() {
                     const timer = setTimeout(() => {
                         triggerActionAnimations();
-                        if (text) {
-                            const textBox = document.createElement('div');
-                            textBox.id = 'playwright-cursor-textbox';
-                            cursor.appendChild(textBox);
-                            typeText(textBox, text, () => {
-                                const cleanupTimer = setTimeout(() => {
-                                    textBox.remove();
-                                    if (window.playwrightTimers.has(cleanupTimer)) {
-                                        if (['text', 'scroll', 'key', 'info', 'processing'].includes(type)) {
-                                            const pointerIcon = document.getElementById('playwright-cursor-pointer-icon');
-                                            document.querySelectorAll('.playwright-cursor-icon').forEach(icon => icon.style.display = 'none');
-                                            if (pointerIcon) {
-                                                pointerIcon.style.display = 'block';
-                                                pointerIcon.classList.add('icon-fade-in');
-                                                const fadeTimer = setTimeout(() => pointerIcon.classList.remove('icon-fade-in'), 300);
-                                                window.playwrightTimers.add(fadeTimer);
-                                            }
-                                        }
-                                    }
-                                }, 1000);
-                                window.playwrightTimers.add(cleanupTimer);
-                            });
-                        }
+                        updateDisplay(text, iconType);
+
+                        const cleanupTimer = setTimeout(() => {
+                            updateDisplay('Cursor', 'pointer');
+                        }, 3000);
+                        window.playwrightTimers.add(cleanupTimer);
+
                     }, 50);
                     window.playwrightTimers.add(timer);
                 }
@@ -600,45 +664,12 @@ class Animator:
         })();
         """
 
-    async def run_animation(self, params: dict | None = None):
-        """A helper to call the injected run_animation function."""
-        if not self.page:
-            print("Animator Error: Page object not set.")
-            return
-        try:
-            if params:
-                await self.page.evaluate("window.run_animation", params)
-            else:
-                await self.page.evaluate("window.run_animation({})")
-
-        except Exception as e:
-            print(f"Animator failed to run: {e}")
-
-    async def get_coords(self, element_node: "DOMElementNode"):
-        try:
-            element_handle = self.page.locator(f"xpath={element_node.xpath}")
-            if await element_handle.count() == 0:
-                # Use the description from the element_node for a rich error message.
-                description = element_node.get_description()
-                await self.info(text=f"Could not find element to click: {description}")
-                return None
-
-            box = await element_handle.bounding_box()
-            if not box:
-                return None
-
-            # scroll = await self.page.evaluate("() => ({ x: window.scrollX, y: window.scrollY })")
-
-            center_coords = {
-                "x": box["x"] + box["width"] / 2,
-                "y": box["y"] + box["height"] / 2,
-            }
-            return center_coords
-
-        except Exception as e:
-            print(f"Animator failed to get element handle: {e}")
-
-    async def click(self, element_node: "DOMElementNode"=None, coords: dict|None = None, text: str = "Click!"):
+    async def click(
+        self,
+        element_node: "DOMElementNode" = None,
+        coords: dict | None = None,
+        text: str = "Click!",
+    ):
         """
         Gets fresh coordinates for an element and animates a click animator.
         """
@@ -648,19 +679,20 @@ class Animator:
 
         try:
             if element_node:
-                bbox = element_node.bbox
+                bbox: BoundingBox = element_node.bbox
                 if bbox:
-                    x = bbox["x"] + bbox["width"] / 2
-                    y = bbox["y"] + bbox["height"] / 2
+                    x = bbox.x + bbox.width / 2
+                    y = bbox.y + bbox.height / 2
             elif coords:
                 x = coords.get("x")
                 y = coords.get("y")
 
             if not (x and y):
+                print(f"Click animation aborted as no coords found")
                 return
 
             params = {
-                "coords": coords,
+                "coords": {"x": x, "y": y},
                 "text": text,
                 "action": {"type": "click"},
             }
@@ -669,12 +701,25 @@ class Animator:
         except Exception as e:
             print(f"Animator failed during click preparation: {e}")
 
-    async def info(self, text: str):
-        """Animates the info message on the browser page"""
-        await self.run_animation({"text": text, "action": {"type": "info"}})
-
+    async def log(self, text: str, level: str = "info"):
+        """
+        Animates the log message on the browser page
+        """
+        if not self.page:
+            print("Cannot log: no page instance available")
+            return
+            
+        try:
+            params = {"text": text, "level": level}
+            await self.page.evaluate("window.createLogEntry", params)
+        except Exception as e:
+            print(f"Animator failed during log: {e}")
+        
     async def type(
-        self, element_node: "DOMElementNode", text: Optional[str] = "Typing..."
+        self,
+        element_node: "DOMElementNode" = None,
+        text: str = "Typing...",
+        coords: dict | None = None,
     ):
         """
         Animates a text input animator.
@@ -683,27 +728,35 @@ class Animator:
             return
 
         try:
-            coords = await self.get_coords(element_node)
-            if not coords:
+            x = None
+            y = None
+
+            if element_node:
+                if bbox := element_node.bbox:
+                    x = bbox.x + bbox.width / 2
+                    y = bbox.y + bbox.height / 2
+            elif coords:
+                x = coords.get("x")
+                y = coords.get("y")
+
+            if not (x and y):
                 return
 
-            params = {"coords": coords, "text": text, "action": {"type": "text"}}
+            params = {
+                "coords": {"x": x, "y": y},
+                "text": text,
+                "action": {"type": "text"},
+            }
+
             await self.run_animation(params)
 
         except Exception as e:
             print(f"Animator failed during type preparation: {e}")
 
-    async def screenshot(self, sound_effect: bool = True):
-        """
-        Triggers the screenshot animator.
-        """
-        params = {"action": {"type": "screenshot", "sound_effect": sound_effect}}
-        await self.run_animation(params)
-
     async def scroll(
         self,
         direction: str,
-        text: str = None,
+        text: str = "Scrolling...",
         element_node: "DOMElementNode" = None,
         coords: dict = None,
     ):
@@ -718,10 +771,10 @@ class Animator:
             y = None
 
             if element_node:
-                bbox = element_node.bbox
+                bbox: BoundingBox = element_node.bbox
                 if bbox:
-                    x = bbox["x"] + bbox["width"] / 2
-                    y = bbox["y"] + bbox["height"] / 2
+                    x = bbox.x + bbox.width / 2
+                    y = bbox.y + bbox.height / 2
             elif coords:
                 x = coords.get("x")
                 y = coords.get("y")
@@ -729,16 +782,9 @@ class Animator:
             if not (x and y):
                 return
 
-            # Use provided text or a sensible default.
-            animator_text = (
-                text
-                if text is not None
-                else f"Scrolling towards element {element_node.highlight_index}"
-            )
-
             params = {
-                "coords": coords,
-                "text": animator_text,
+                "coords": {"x": x, "y": y},
+                "text": text,
                 "action": {"type": "scroll", "direction": direction},
             }
             await self.run_animation(params)
@@ -746,16 +792,84 @@ class Animator:
         except Exception as e:
             print(f"Animator failed during scroll preparation: {e}")
 
-    async def stop_all_animations(self):
-        """Stops any active animator."""
+    async def dropdown(
+        self,
+        element_node: "DOMElementNode" = None,
+        text: str = "Dropdown!",
+        coords: dict | None = None,
+    ):
+        """
+        Animates a dropdown opening action.
+        """
         if not self.page:
             return
-        try:
-            await self.page.evaluate("window.stop_all_animations")
-        except Exception as e:
-            print(f"Failed to stop animator: {e}")
 
-    async def run_screenshot_animation(self):
+        try:
+            x = None
+            y = None
+
+            if element_node and hasattr(element_node, "bbox"):
+                bbox = element_node.bbox
+                if bbox:
+                    x = bbox.x + bbox.width / 2
+                    y = bbox.y + bbox.height / 2
+            elif coords:
+                x = coords.get("x")
+                y = coords.get("y")
+
+            if not (x and y):
+                print(f"Dropdown animation aborted as no coords found")
+                return
+
+            params = {
+                "coords": {"x": x, "y": y},
+                "text": text,
+                "action": {"type": "dropdown"},
+            }
+            await self.run_animation(params)
+
+        except Exception as e:
+            print(f"Animator failed during dropdown preparation: {e}")
+
+    async def key(self, text: str = None):
+        """
+        Animates a key press action.
+        """
+        if not self.page:
+            return
+
+        try:
+            # Default coordinates to center of screen if not provided
+            params = {
+                "text": text,
+                "action": {"type": "key"},
+            }
+            await self.run_animation(params)
+
+        except Exception as e:
+            print(f"Animator failed during key press animation: {e}")
+
+    async def processing(self, text: str):
+        """
+        Shows a processing/loading animation to indicate that work is being done.
+
+        Parameters:
+        - text: Message to display during the processing animation
+        """
+        if not self.page:
+            return
+
+        try:
+            params = {
+                "text": text,
+                "action": {"type": "processing"},
+            }
+            await self.run_animation(params)
+
+        except Exception as e:
+            print(f"Animator failed during processing animation: {e}")
+
+    async def screenshot(self):
         """Runs the screenshot animation."""
         if not self.page:
             return
@@ -765,3 +879,35 @@ class Animator:
             )
         except Exception as e:
             print(f"Failed to stop screenshot animation: {e}")
+
+    async def hide_animations(self):
+        """Hides any active animations."""
+        if not self.page:
+            return
+        try:
+            await self.page.evaluate("window.hide_animations")
+        except Exception as e:
+            print(f"Failed to stop animator: {e}")
+
+    async def show_animations(self):
+        """Shows any active animations."""
+        if not self.page:
+            return
+        try:
+            await self.page.evaluate("window.show_animations")
+        except Exception as e:
+            print(f"Failed to show animations: {e}")
+
+    async def run_animation(self, params: dict | None = None):
+        """A helper to call the injected run_animation function."""
+        if not self.page:
+            print("Animator Error: Page object not set.")
+            return
+        try:
+            if params:
+                await self.page.evaluate("window.run_animation", params)
+            else:
+                await self.page.evaluate("window.run_animation({})")
+
+        except Exception as e:
+            print(f"Animator failed to run: {e}")
