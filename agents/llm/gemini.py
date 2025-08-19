@@ -9,12 +9,14 @@ from typing import get_origin, get_args
 from langchain_core.messages import AIMessage
 from langchain_core.messages.tool import ToolCall
 import uuid
+from google.genai import errors as genai_errors
 from typing import Generic, TypeVar, Literal
 from dotenv import load_dotenv
 from .types import LLM, MessageBlueprintBase, LLMConfig, GeminiMessage
 from logging_utils import get_llm_logger
 from .usage_stats import get_usage_stats
 
+load_dotenv()
 
 logger = get_llm_logger("gemini")
 
@@ -24,9 +26,13 @@ class GeminiLLM(LLM):
 
     def __init__(self, model_name: str = None, provider: str = None):
         """Initialize the Gemini wrapper."""
-        super().__init__(model_name, provider)
-        load_dotenv()
+        self.model_name = model_name or os.getenv("GEMINI_MODEL_NAME", "gemini-2.5-flash-lite")
+        logger.info(f"Using model: {self.model_name}")
         api_key = os.getenv("GEMINI_API_KEY")
+        
+        if not api_key:
+            raise ValueError("GEMINI_API_KEY environment variable not set.")
+        
         self.client = genai.Client(api_key=api_key)
 
     async def __call__(
@@ -46,27 +52,44 @@ class GeminiLLM(LLM):
                 processed_tools.append(tool)
 
 
-        logger.info(f"{len(processed_tools)} Tools processed successfully, proceeding with API call.")
-
         system_instructions, contents = message_plan.to_gemini_format()
-
-        response = await self.client.aio.models.generate_content(
-            model=self.model_name,
-            contents=contents,
-            config=types.GenerateContentConfig(
-                system_instruction=system_instructions,
-                tools=processed_tools,
-                temperature=0.4,
-                automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
-                thinking_config=types.ThinkingConfig(
-                    include_thoughts=True,
-                    thinking_budget=(
-                        config.thinking_budget if config and hasattr(config, "thinking_budget") else 0
+        
+        async def get_response():
+            return await self.client.aio.models.generate_content(
+                model=self.model_name,
+                contents=contents,
+                config=types.GenerateContentConfig(
+                    system_instruction=system_instructions,
+                    tools=processed_tools,
+                    temperature=config.temperature,
+                    automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
+                    thinking_config=types.ThinkingConfig(
+                        include_thoughts=True,
+                        thinking_budget=(
+                            config.thinking_budget if config and hasattr(config, "thinking_budget") else 0
+                        ),
                     ),
-                ),
+                )
             )
-        )
-                
+        try:
+            response = await get_response()
+        except genai_errors.ServerError as e:
+            if e.status == 500:
+                logger.warning(f"🌩️ Gemini struck by a 500 thunderbolt — staging comeback in 2s")
+                import asyncio
+                await asyncio.sleep(2)
+                try:
+                    response = await get_response()
+                except Exception as e:
+                    logger.error(f"Retry failed: {e}", exc_info=True)
+                    raise e
+            else:
+                logger.error(f"Gemini API returned a {e.status} error")
+                raise e
+        except Exception as e:
+            logger.error(f"Gemini API call failed: {e}", exc_info=True)
+            raise e
+        
         # Track usage statistics
         usage_stats = get_usage_stats()
         if response and response.usage_metadata:
