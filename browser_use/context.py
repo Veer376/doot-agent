@@ -312,16 +312,32 @@ class BrowserContext:
         if not self.config.keep_alive and self.session is not None:
             logger.debug("BrowserContext was not properly closed before destruction")
             try:
-                # Use sync Playwright method for force cleanup
-                if hasattr(self.session.context, "_impl_obj"):
-                    asyncio.run(self.session.context._impl_obj.close())
+                if hasattr(self, "close") and asyncio is not None:
+                    try:
+                        asyncio.run(self.close())
+                    except RuntimeError as e:
+                        if "Event loop is closed" in str(e):
+                            # This happens during interpreter shutdown.
+                            # We can create a new loop to run the cleanup.
+                            loop = asyncio.new_event_loop()
+                            asyncio.set_event_loop(loop)
+                            try:
+                                loop.run_until_complete(self.close())
+                            finally:
+                                loop.close()
+                                asyncio.set_event_loop(None)
+                        else:
+                            # Other runtime errors should be reported.
+                            logger.warning(f"RuntimeError during BrowserContext cleanup: {e}")
 
+            except Exception as e:
+                logger.warning(f"Failed to force close browser context: {e}")
+            finally:
                 self.session = None
                 self.agent_current_page = None
                 self.human_current_page = None
-                gc.collect()
-            except Exception as e:
-                logger.warning(f"Failed to force close browser context: {e}")
+                if gc is not None:
+                    gc.collect()
 
     @time_execution_async("--initialize_session")
     async def _initialize_session(self):
@@ -1262,7 +1278,7 @@ class BrowserContext:
             await self._check_and_handle_navigation(page)
 
             # wait for DOM to stabilize (especially important for JavaScript-heavy sites)
-            # await self._wait_for_dom_stability(stability_threshold_ms=1000)
+            await self._wait_for_dom_stability(stability_threshold_ms=1000)
 
         except URLNotAllowedError as e:
             raise e
@@ -1360,15 +1376,32 @@ class BrowserContext:
 
     async def _check_and_handle_navigation(self, page: Page) -> None:
         """Check if current page URL is allowed and handle if not."""
-        if not self._is_url_allowed(page.url):
-            logger.warning(f"⛔️  Navigation to non-allowed URL detected: {page.url}")
+        try:
+            # First check if the page is valid - this avoids JS errors
+            if page.is_closed():
+                logger.warning("Page is closed during navigation check")
+                return
+                
+            # Use try/except when accessing page.url as it could cause JS errors
             try:
-                await self.go_back()
+                current_url = page.url
             except Exception as e:
-                logger.error(
-                    f"⛔️  Failed to go back after detecting non-allowed URL: {str(e)}"
-                )
-            raise URLNotAllowedError(f"Navigation to non-allowed URL: {page.url}")
+                logger.warning(f"Cannot access page URL: {str(e)}")
+                return
+                
+            if not self._is_url_allowed(current_url):
+                logger.warning(f"⛔️  Navigation to non-allowed URL detected: {current_url}")
+                try:
+                    await self.go_back()
+                except Exception as e:
+                    logger.error(
+                        f"⛔️  Failed to go back after detecting non-allowed URL: {str(e)}"
+                    )
+                raise URLNotAllowedError(f"Navigation to non-allowed URL: {current_url}")
+        except Exception as e:
+            # Catch any other unexpected errors to prevent them from causing the click to fail
+            logger.warning(f"Error in navigation check: {str(e)}")
+            # Don't re-raise the exception
 
     async def navigate_to(self, url: str):
         """Navigate the agent's current tab to a URL"""
@@ -1585,7 +1618,7 @@ class BrowserContext:
         try:
             await self.remove_highlights()
             dom_service = DomService(page)
-            
+
             content = await dom_service.get_clickable_elements(
                 focus_element=focus_element,
                 viewport_expansion=self.config.viewport_expansion,
@@ -1654,11 +1687,8 @@ class BrowserContext:
 
         # We no longer force tabs to the foreground  it disrupts user focus
         # await page.bring_to_front()
-
-        await self.animator.stop_all_animations()
-
-        # stop the simulator - with error handling
-        # await self.simulator.stop_simulation()
+        
+        await self.animator.hide_animations()
         
         screenshot = await page.screenshot(
             full_page=full_page,
@@ -1666,8 +1696,8 @@ class BrowserContext:
             caret="initial",
         )
 
-        asyncio.create_task(self.animator.run_animation())
-        asyncio.create_task(self.animator.run_screenshot_animation())
+        asyncio.create_task(self.animator.show_animations())
+        asyncio.create_task(self.animator.screenshot())
 
         screenshot_b64 = base64.b64encode(screenshot).decode("utf-8")
 
@@ -2043,8 +2073,6 @@ class BrowserContext:
         Input text into an element with proper error handling and state management.
         Handles different types of input fields and ensures proper element state before input.
         """
-        asyncio.create_task(self.animator.type(element_node=element_node))
-
         try:
             element_handle = await self.get_locate_element(element_node)
 
@@ -2062,17 +2090,24 @@ class BrowserContext:
                 pass
 
             try:
-                await element_handle.click()
+                # Preferred: Playwright's fill() on the element handle
+                # FIXME: Test this .fill() as its performing clicks on incorrect positions.
+                await element_handle.fill(text)
+                logger.info(f"Filled text '{text}' into element: {element_node.get_description()}")
+                
             except Exception:
-                raise BrowserError("Failed to click to focus the element.")
+                # Fallback: Manual select-all and backspace
+                asyncio.create_task(self.animator.type(element_node=element_node))
+                page: Page = await self.get_agent_current_page()
 
-            try:
-                page = await self.get_agent_current_page()
+                await element_handle.click()  # Ensure focus
+                if await page.evaluate("navigator.platform.includes('Mac')"):
+                    await page.keyboard.press("Meta+A")
+                else:
+                    await page.keyboard.press("Control+A")
+                await page.keyboard.press("Backspace")
+
                 await page.keyboard.type(text)
-            except Exception as e:
-                raise BrowserError(
-                    f"Failed to type text into element: {element_node.get_description()}. Error: {str(e)}"
-                )
 
         except Exception as e:
             raise BrowserError(e)
@@ -2087,10 +2122,6 @@ class BrowserContext:
         page = await self.get_agent_current_page()
 
         try:
-            # Highlight before clicking
-            # if element_node.highlight_index is not None:
-            # 	await self._update_state(focus_element=element_node.highlight_index)
-
             element_handle = await self.get_locate_element(element_node)
 
             if element_handle is None:
@@ -2132,6 +2163,7 @@ class BrowserContext:
                     await self._check_and_handle_navigation(page)
 
             try:
+                # TODO: use the playwright locator to click which will wait, handle enable, stable etc.
                 return await perform_click(lambda: element_handle.click(timeout=200))
             except URLNotAllowedError as e:
                 raise e
@@ -2151,6 +2183,1341 @@ class BrowserContext:
             raise Exception(
                 f"Failed to click element: {repr(element_node)}. Error: {str(e)}"
             )
+
+    async def is_element_dropdown(
+        self,
+        element_node: DOMElementNode,
+        interactive: bool = False,
+        search_children: bool = True,
+    ) -> dict | str | None:
+        """
+        Comprehensive dropdown detection. Returns a dictionary with dropdown details or None.
+        """
+
+        page = await self.get_agent_current_page()
+        result = {
+            "is_dropdown": False,
+            "dropdown_type": None,
+            "detection_method": None,
+            "target_xpath": None,
+            "original_xpath": element_node.xpath,
+        }
+
+        # ---------- Static analysis ----------
+        tag = element_node.tag_name.lower()
+        attrs = {k.lower(): v for k, v in element_node.attributes.items()}
+
+        if tag == "select":
+            logger.debug("Detected native dropdown through static analysis")
+            result.update(
+                {
+                    "is_dropdown": True,
+                    "dropdown_type": "native",
+                    "detection_method": "static",
+                    "target_xpath": element_node.xpath,
+                }
+            )
+            return result
+
+        if any(
+            attr in attrs.get("role", "").lower() for attr in ["combobox", "listbox", "menu"]
+        ):
+            logger.debug("Detected custom dropdown through role attribute")
+            result.update(
+                {
+                    "is_dropdown": True,
+                    "dropdown_type": "custom",
+                    "detection_method": "static",
+                    "target_xpath": element_node.xpath,
+                }
+            )
+            return result
+
+        if any(
+            cls in attrs.get("class", "").lower()
+            for cls in [
+                "dropdown",
+                "select",
+                "combobox",
+                "menu-button",
+                "select-button",
+            ]
+        ):
+            logger.debug("Detected custom dropdown through class attribute")
+            result.update(
+                {
+                    "is_dropdown": True,
+                    "dropdown_type": "custom",
+                    "detection_method": "static",
+                    "target_xpath": element_node.xpath,
+                }
+            )
+            return result
+
+        if any(
+            attr in element_node.attributes
+            for attr in ["aria-haspopup", "aria-expanded", "aria-controls"]
+        ):
+            logger.debug("Detected custom dropdown through ARIA attribute")
+            result.update(
+                {
+                    "is_dropdown": True,
+                    "dropdown_type": "custom",
+                    "detection_method": "static",
+                    "target_xpath": element_node.xpath,
+                }
+            )
+            return result
+
+        # If neither interactive nor child searching requested, return early
+        if not interactive and not search_children:
+            return result
+
+        # Reusable JS snippets (kept as constants to avoid duplication)
+        VISIBLE_DROPDOWN_QUERY_JS = """() => {
+            return Array.from(document.querySelectorAll('ul[role="listbox"], [role="menu"], .dropdown-menu, ul.options, .select-options'))
+                .filter(el => {
+                    const style = window.getComputedStyle(el);
+                    return style.display !== 'none' && style.visibility !== 'hidden';
+                })
+                .map(el => el.outerHTML);
+        }"""
+
+        CHILD_SEARCH_JS = """(xpath) => {
+            const el = document.evaluate(xpath, document, null,
+                XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
+            if (!el) return null;
+            
+            const getXPath = function(element) {
+                if (element.id) {
+                    return `//*[@id="${element.id}"]`;
+                }
+                
+                let path = [];
+                while (element && element.nodeType === Node.ELEMENT_NODE) {
+                    let idx = 0;
+                    for (let sibling = element.previousSibling; sibling; sibling = sibling.previousSibling) {
+                        if (sibling.nodeType === Node.DOCUMENT_TYPE_NODE) continue;
+                        if (sibling.nodeName === element.nodeName) idx++;
+                    }
+                    path.unshift(`${element.nodeName.toLowerCase()}[${idx+1}]`);
+                    element = element.parentNode;
+                }
+                return path.length ? '/' + path.join('/') : '';
+            };
+            
+            // First check direct children (fastest)
+            const directSelect = el.querySelector('select');
+            if (directSelect) {
+                return {
+                    type: 'native',
+                    xpath: getXPath(directSelect),
+                    method: 'child-direct'
+                };
+            }
+            
+            const directCustom = el.querySelector('[role="combobox"], [role="listbox"], [role="menu"], .dropdown, .select, .combobox, .dropdown-toggle, .menu-button, .select-button, [aria-haspopup], [aria-expanded], [aria-controls]');
+            if (directCustom) {
+                return {
+                    type: 'custom',
+                    xpath: getXPath(directCustom),
+                    method: 'child-direct'
+                };
+            }
+            
+            // Bounded BFS search (limited depth)
+            let queue = Array.from(el.children);
+            let visited = 0;
+            const MAX_NODES = 30;
+            const MAX_DEPTH = 2;
+            
+            for (let depth = 0; depth < MAX_DEPTH && queue.length > 0 && visited < MAX_NODES; depth++) {
+                const levelSize = queue.length;
+                for (let i = 0; i < levelSize && visited < MAX_NODES; i++) {
+                    visited++;
+                    const node = queue.shift();
+                    
+                    if (node.tagName === 'SELECT') {
+                        return {
+                            type: 'native',
+                            xpath: getXPath(node),
+                            method: 'child-search'
+                        };
+                    }
+                    
+                    if (node.getAttribute('role') === 'combobox' ||
+                        node.getAttribute('role') === 'listbox' ||
+                        node.getAttribute('role') === 'menu' ||
+                        node.classList.contains('dropdown') ||
+                        node.classList.contains('select') ||
+                        node.classList.contains('combobox') ||
+                        node.classList.contains('dropdown-toggle') ||
+                        node.classList.contains('menu-button') ||
+                        node.classList.contains('select-button') ||
+                        node.hasAttribute('aria-haspopup') ||
+                        node.hasAttribute('aria-expanded') ||
+                        node.hasAttribute('aria-controls')) {
+                        return {
+                            type: 'custom',
+                            xpath: getXPath(node),
+                            method: 'child-search'
+                        };
+                    }
+                    
+                    Array.from(node.children).forEach(child => queue.push(child));
+                }
+            }
+            
+            return null;
+        }"""
+
+        try:
+            element_handle = await self.get_locate_element(element_node)
+            if not element_handle:
+                logger.debug("Could not locate element for dropdown detection")
+                return result
+
+            # ---------- Interactive checks (click/ARIA/keyboard) ----------
+            if interactive:
+                try:
+                    pre_click_visible = await page.evaluate(VISIBLE_DROPDOWN_QUERY_JS)
+
+                    # Try clicking the element
+                    try:
+                        await element_handle.click(timeout=1000, force=True)
+                        await page.wait_for_timeout(500)
+                    except Exception as click_exc:
+                        logger.debug(
+                            f"Click attempt threw exception (may still continue): {str(click_exc)}"
+                        )
+
+                    post_click_visible = await page.evaluate(VISIBLE_DROPDOWN_QUERY_JS)
+                    new_elements = [
+                        el for el in post_click_visible if el not in pre_click_visible
+                    ]
+                    if new_elements:
+                        logger.debug("Detected dropdown through click interaction")
+                        result.update(
+                            {
+                                "is_dropdown": True,
+                                "dropdown_type": "custom",
+                                "detection_method": "click",
+                                "target_xpath": element_node.xpath,
+                            }
+                        )
+                        return result
+
+                    # Check aria-expanded attribute changed to true
+                    try:
+                        is_expanded = await page.evaluate(
+                            """(xpath) => {
+                                const el = document.evaluate(xpath, document, null,
+                                    XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
+                                return el && el.getAttribute('aria-expanded') === 'true';
+                            }""",
+                            element_node.xpath,
+                        )
+                        if is_expanded:
+                            logger.debug(
+                                "Detected dropdown through aria-expanded change"
+                            )
+                            result.update(
+                                {
+                                    "is_dropdown": True,
+                                    "dropdown_type": "custom",
+                                    "detection_method": "click",
+                                    "target_xpath": element_node.xpath,
+                                }
+                            )
+                            return result
+                    except Exception as e:
+                        logger.debug(f"aria-expanded check failed: {str(e)}")
+
+                    # Keyboard interactions (accessibility)
+                    try:
+                        await element_handle.focus()
+
+                        # Enter
+                        await page.keyboard.press("Enter")
+                        await page.wait_for_timeout(300)
+                        post_key_visible = await page.evaluate(
+                            VISIBLE_DROPDOWN_QUERY_JS
+                        )
+                        new_elements_key = [
+                            el for el in post_key_visible if el not in pre_click_visible
+                        ]
+                        if new_elements_key:
+                            logger.debug(
+                                "Detected dropdown through keyboard Enter interaction"
+                            )
+                            result.update(
+                                {
+                                    "is_dropdown": True,
+                                    "dropdown_type": "custom",
+                                    "detection_method": "keyboard-enter",
+                                    "target_xpath": element_node.xpath,
+                                }
+                            )
+                            return result
+
+                        # ArrowDown
+                        await element_handle.focus()
+                        await page.keyboard.press("ArrowDown")
+                        await page.wait_for_timeout(300)
+                        post_arrow_visible = await page.evaluate(
+                            VISIBLE_DROPDOWN_QUERY_JS
+                        )
+                        new_elements_arrow = [
+                            el
+                            for el in post_arrow_visible
+                            if el not in pre_click_visible
+                        ]
+                        if new_elements_arrow:
+                            logger.debug(
+                                "Detected dropdown through keyboard ArrowDown interaction"
+                            )
+                            result.update(
+                                {
+                                    "is_dropdown": True,
+                                    "dropdown_type": "custom",
+                                    "detection_method": "keyboard-arrow",
+                                    "target_xpath": element_node.xpath,
+                                }
+                            )
+                            return result
+
+                    except Exception as ke:
+                        logger.debug(f"Keyboard detection attempt failed: {str(ke)}")
+
+                except Exception as e:
+                    logger.debug(
+                        f"Click/interactive detection attempt failed: {str(e)}"
+                    )
+
+            # ---------- Child search (non-interactive or fallback) ----------
+            if search_children:
+                try:
+                    dropdown_search = await page.evaluate(
+                        CHILD_SEARCH_JS, element_node.xpath
+                    )
+                    if dropdown_search:
+                        logger.debug(
+                            f"Found dropdown element within target: {dropdown_search}"
+                        )
+                        result.update(
+                            {
+                                "is_dropdown": True,
+                                "dropdown_type": dropdown_search.get("type"),
+                                "detection_method": dropdown_search.get("method"),
+                                "target_xpath": dropdown_search.get("xpath"),
+                            }
+                        )
+                        return result
+                except Exception as e:
+                    logger.debug(f"Child search detection failed: {str(e)}")
+
+        except Exception as e:
+            logger.error(f"Error during dropdown detection: {str(e)}")
+
+        # If we reach here, no dropdown was detected
+        return result
+
+    async def get_dropdown_details(self, element_node: DOMElementNode) -> dict | None:
+        """
+        Gets comprehensive details about a dropdown element including type, options, and summary.
+        First robustly detects if the element is or contains a dropdown,
+        then opens it like a user would and extracts its options.
+        """
+        page = await self.get_agent_current_page()
+
+        # First use our robust detection method
+        dropdown_detection = await self.is_element_dropdown(
+            element_node, interactive=True, search_children=True
+        )
+        if not dropdown_detection["is_dropdown"]:
+            logger.debug(f"No dropdown detected for element {element_node.tag_name}")
+            return None
+
+        # We found a dropdown, but it might be a child element
+        dropdown_type = dropdown_detection["dropdown_type"]
+        target_xpath = dropdown_detection["target_xpath"]
+
+        # If we detected a dropdown in a child element, get that element
+        target_element = element_node
+        if target_xpath and target_xpath != element_node.xpath:
+            # Create a new element node for the target
+            dom_item = await page.evaluate(
+                """(xpath) => {
+                const el = document.evaluate(xpath, document, null,
+                    XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
+                if (!el) return null;
+                
+                return {
+                    xpath,
+                    tag_name: el.tagName,
+                    attributes: Object.fromEntries(
+                        Array.from(el.attributes).map(attr => [attr.name, attr.value])
+                    ),
+                    text_content: el.textContent
+                };
+            }""",
+                target_xpath,
+            )
+
+            if dom_item:
+                # Create new DOMElementNode with the found element's data
+                target_element = DOMElementNode(
+                    xpath=target_xpath,
+                    tag_name=dom_item["tag_name"],
+                    attributes=dom_item["attributes"],
+                    text_content=dom_item.get("text_content", ""),
+                    children=[],  # We don't need children for this operation
+                )
+                logger.debug(
+                    f"Using detected dropdown element: {target_element.tag_name}"
+                )
+            else:
+                logger.debug(
+                    f"Could not get target element at {target_xpath}, using original"
+                )
+                # Continue with original element
+
+        try:
+            # For custom dropdowns, try to open it first
+            if dropdown_type == "custom":
+                dropdown_label = "Custom dropdown"
+                dropdown_data = await self._get_custom_dropdown_options(
+                    target_element, page
+                )
+            else:  # native dropdown
+                # Native dropdowns don't need to be explicitly opened to read options
+                dropdown_label = "Native dropdown"
+                dropdown_data = await self._get_native_dropdown_options(
+                    target_element, page
+                )
+
+                # But we might still try to open it if we got no options
+                if not dropdown_data.get("options"):
+                    open_info = await self._open_dropdown(target_element, page)
+                    # Try to get options again if opened
+                    if open_info.get("opened"):
+                        dropdown_data = await self._get_native_dropdown_options(
+                            target_element, page
+                        )
+                        # Add opening method from the open_info
+                        dropdown_data["opened_by"] = open_info.get("method")
+
+            # Format options and create summary
+            raw_options = dropdown_data.get("options", [])
+            formatted_result = self._format_dropdown_options_and_summary(
+                raw_options, dropdown_label
+            )
+
+            # Extract selected options in dict format
+            selected_options = []
+            for opt in raw_options:
+                if opt.get("selected"):
+                    selected_options.append(
+                        {
+                            "index": opt.get("index"),
+                            "text": opt.get("text", ""),
+                            "value": opt.get("value", ""),
+                        }
+                    )
+
+            # Add selected options to the result
+            formatted_result["selected_options"] = selected_options
+
+            # Add dropdown type and all metadata to the result
+            formatted_result["dropdown_type"] = dropdown_type
+            formatted_result["opened"] = bool(dropdown_data.get("opened_by"))
+            formatted_result["opened_by"] = dropdown_data.get("opened_by")
+            formatted_result["frame_name"] = dropdown_data.get("frame_name")
+            formatted_result["frame_index"] = dropdown_data.get("frame_index")
+            formatted_result["index_base"] = dropdown_data.get("index_base", 0)
+
+            # Add detection metadata
+            formatted_result["detection_method"] = dropdown_detection[
+                "detection_method"
+            ]
+            formatted_result["original_xpath"] = dropdown_detection["original_xpath"]
+            formatted_result["target_xpath"] = dropdown_detection["target_xpath"]
+
+            return formatted_result
+
+        except Exception as e:
+            logger.error(f"Failed to process {dropdown_type} dropdown: {str(e)}")
+            return {
+                "dropdown_type": dropdown_type,
+                "options": [],
+                "selected_options": [],  # Empty array for selected options
+                "summary": f"{dropdown_type.title()} dropdown detected but error occurred: {str(e)}",
+                "opened": False,
+                "opened_by": None,
+                "frame_name": None,
+                "frame_index": None,
+                "index_base": 0,
+                "detection_method": dropdown_detection["detection_method"],
+                "original_xpath": dropdown_detection["original_xpath"],
+                "target_xpath": dropdown_detection["target_xpath"],
+            }
+
+    async def select_dropdown_option_by_index(
+        self, element_node: DOMElementNode, option_index: int
+    ) -> dict:
+        """
+        Selects an option from a dropdown by its index.
+
+        Args:
+            element_node: The DOM node of the dropdown element
+            option_index: The index of the option to select (0-based)
+
+        Returns:
+            dict: Dictionary with selection results
+                {
+                    "success": bool,       # Whether the selection was successful
+                    "message": str,        # Status message or error
+                    "selected_option": dict, # Information about the selected option
+                }
+        """
+        page = await self.get_agent_current_page()
+        result = {
+            "success": False,
+            "message": "Failed to select option",
+            "selected_option": None,
+        }
+
+        try:
+            # First, check if this is a dropdown
+            dropdown_info = await self.is_element_dropdown(element_node)
+            if not dropdown_info.get("is_dropdown", False):
+                result["message"] = "Element is not a dropdown"
+                return result
+
+            # Get dropdown type and target element if different
+            dropdown_type = dropdown_info["dropdown_type"]
+            target_xpath = dropdown_info.get("target_xpath") or element_node.xpath
+
+            # For native dropdowns, get the options to validate the index
+            target_option = None
+            if dropdown_type == "native":
+                # Get options data to find our target option
+                dropdown_data = await self._get_native_dropdown_options(
+                    element_node, page
+                )
+                options = dropdown_data.get("options", [])
+
+                if not options:
+                    result["message"] = "No options found in native dropdown"
+                    return result
+
+                # Make sure the index is within range
+                if option_index < 0 or option_index >= len(options):
+                    result["message"] = (
+                        f"Option index {option_index} out of range (0-{len(options)-1})"
+                    )
+                    return result
+
+                target_option = options[option_index]
+
+            # For native <select> dropdowns
+            if dropdown_type == "native":
+                for frame_index, frame in enumerate(page.frames):
+                    try:
+                        success = await frame.evaluate(
+                            """
+                            (args) => {
+                                const select = document.evaluate(args.xpath, document, null,
+                                    XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
+                                if (!select) return false;
+                                
+                                // Set the select value
+                                select.selectedIndex = args.optionIndex;
+                                
+                                // Trigger change event
+                                const event = new Event('change', { bubbles: true });
+                                select.dispatchEvent(event);
+                                
+                                // Also dispatch input event for good measure
+                                const inputEvent = new Event('input', { bubbles: true });
+                                select.dispatchEvent(inputEvent);
+                                
+                                return true;
+                            }
+                            """,
+                            {"xpath": target_xpath, "optionIndex": option_index},
+                        )
+
+                        if success:
+                            result["success"] = True
+                            result["message"] = (
+                                f"Successfully selected option at index {option_index}"
+                            )
+                            result["selected_option"] = target_option
+                            return result
+
+                    except Exception as e:
+                        logger.debug(f"Error in frame {frame_index}: {str(e)}")
+
+            # For custom dropdowns, we need to click to open it first
+            else:
+                logger.debug(
+                    f"Handling custom dropdown selection for index {option_index}"
+                )
+                # First locate and click the dropdown to open it
+                element_handle = await self.get_locate_element(element_node)
+                await element_handle.click()
+                await asyncio.sleep(0.5)  # Wait for dropdown to open
+
+                # Try to find the option and click it
+                open_info = await self._open_dropdown(element_node, page)
+
+                if open_info.get("opened"):
+                    logger.debug(
+                        f"Dropdown opened successfully via {open_info.get('method')}"
+                    )
+
+                    # Get all visible dropdown options using more comprehensive selectors
+                    try:
+                        # First, get all options to validate our index is in range
+                        options_data = await page.evaluate(
+                            """
+                            () => {
+                                // Comprehensive selectors for dropdown options
+                                const OPTION_SELECTORS = [
+                                    'li', 
+                                    '[role="option"]', 
+                                    '[role="menuitem"]', 
+                                    '.dropdown-item', 
+                                    '.select-option',
+                                    '.menu-item',
+                                    '.option', 
+                                    '.item',
+                                    '.select-item',
+                                    'div[id^="item-"]'
+                                ].join(', ');
+                                
+                                // Look for visible options
+                                const options = Array.from(document.querySelectorAll(OPTION_SELECTORS))
+                                    .filter(el => {
+                                        // Check if element is visible
+                                        const style = window.getComputedStyle(el);
+                                        return el.offsetParent !== null && 
+                                               style.display !== 'none' && 
+                                               style.visibility !== 'hidden' &&
+                                               style.opacity !== '0';
+                                    })
+                                    .map((el, index) => ({
+                                        text: el.textContent.trim(),
+                                        index: index
+                                    }));
+                                
+                                return { options };
+                            }
+                            """
+                        )
+
+                        visible_options = options_data.get("options", [])
+
+                        logger.debug(
+                            f"Found {len(visible_options)} visible dropdown options"
+                        )
+
+                        if not visible_options:
+                            result["message"] = (
+                                "No visible dropdown options found after opening dropdown"
+                            )
+                            return result
+
+                        # Make sure the index is within range
+                        if option_index < 0 or option_index >= len(visible_options):
+                            result["message"] = (
+                                f"Option index {option_index} out of range (0-{len(visible_options)-1})"
+                            )
+                            return result
+
+                        # Now click the option at the specified index
+                        target_option = visible_options[option_index]
+
+                        # Try to click the option at the given index
+                        success = await page.evaluate(
+                            """
+                            (args) => {
+                                // Comprehensive selectors for dropdown options
+                                const OPTION_SELECTORS = [
+                                    'li', 
+                                    '[role="option"]', 
+                                    '[role="menuitem"]', 
+                                    '.dropdown-item', 
+                                    '.select-option',
+                                    '.menu-item',
+                                    '.option', 
+                                    '.item',
+                                    '.select-item',
+                                    'div[id^="item-"]'
+                                ].join(', ');
+                                
+                                // Get all visible options
+                                const options = Array.from(document.querySelectorAll(OPTION_SELECTORS))
+                                    .filter(el => {
+                                        // Check if element is visible
+                                        const style = window.getComputedStyle(el);
+                                        return el.offsetParent !== null && 
+                                               style.display !== 'none' && 
+                                               style.visibility !== 'hidden' &&
+                                               style.opacity !== '0';
+                                    });
+                                
+                                if (options.length === 0) return false;
+                                
+                                // Check if index is in range
+                                if (args.optionIndex >= 0 && args.optionIndex < options.length) {
+                                    // Get the element at the index
+                                    const option = options[args.optionIndex];
+                                    console.log('Clicking option:', option.textContent);
+                                    
+                                    // Click the option
+                                    option.click();
+                                    return true;
+                                }
+                                
+                                return false;
+                            }
+                            """,
+                            {"optionIndex": option_index},
+                        )
+
+                        if success:
+                            result["success"] = True
+                            result["message"] = (
+                                f"Successfully clicked option at index {option_index}"
+                            )
+                            result["selected_option"] = target_option
+                            return result
+                    except Exception as e:
+                        logger.debug(
+                            f"Error selecting custom dropdown option: {str(e)}"
+                        )
+
+            result["message"] = (
+                "Failed to select option - could not interact with dropdown"
+            )
+            return result
+
+        except Exception as e:
+            result["message"] = f"Error: {str(e)}"
+            logger.error(f"Error in select_dropdown_option_by_index: {str(e)}")
+            return result
+
+    async def _get_native_dropdown_options(self, element_node, page) -> dict:
+        """
+        Gets options from a native <select> dropdown.
+
+        Returns:
+            dict: Dictionary with options and metadata about the dropdown
+                {
+                    "options": list,       # List of options with text, value, index
+                    "frame_name": str,     # Name of the frame containing the dropdown
+                    "frame_index": int,    # Index of the frame containing the dropdown
+                    "index_base": int      # Base index for dropdown options (usually 0 or 1)
+                }
+        """
+        result = {
+            "options": [],
+            "frame_name": None,
+            "frame_index": None,
+            "index_base": 0,  # Native <select> dropdowns are 0-indexed
+        }
+
+        for frame_index, frame in enumerate(page.frames):
+            try:
+                options_data = await frame.evaluate(
+                    """
+                    (xpath) => {
+                        const select = document.evaluate(xpath, document, null,
+                            XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
+                        if (!select) return null;
+                        
+                        // Check if it's a 1-indexed dropdown (some frameworks start from 1)
+                        // This is a heuristic - if the first option has index 1, it's likely 1-indexed
+                        const indexBase = select.options.length > 0 && select.options[0].index === 1 ? 1 : 0;
+                        
+                        return {
+                            options: Array.from(select.options).map(opt => ({
+                                text: opt.text,
+                                value: opt.value,
+                                index: opt.index,
+                                selected: opt.selected,
+                                disabled: opt.disabled
+                            })),
+                            indexBase: indexBase
+                        };
+                    }
+                    """,
+                    element_node.xpath,
+                )
+
+                if options_data and options_data.get("options"):
+                    logger.debug(f"Found dropdown in frame {frame_index}")
+                    result["options"] = options_data["options"]
+                    result["frame_index"] = frame_index
+                    result["frame_name"] = frame.name or frame.url
+                    result["index_base"] = options_data.get("indexBase", 0)
+                    return result
+
+            except Exception as frame_e:
+                logger.debug(f"Frame {frame_index} evaluation failed: {str(frame_e)}")
+
+        # If we reach here, we didn't find the dropdown in any frame
+        logger.debug("Dropdown not found in any frame")
+        return result
+
+    def _format_dropdown_options_and_summary(self, raw_options, dropdown_label) -> dict:
+        """
+        Formats dropdown options and creates a summary.
+
+        Args:
+            raw_options: Can be a list of options directly, or a dict with "options" key
+            dropdown_label: Label for the dropdown type (e.g., "Native dropdown")
+
+        Returns:
+            dict: Dictionary with formatted options and summary
+        """
+        # Handle case where raw_options might be a dict from the new implementation
+        options_list = (
+            raw_options.get("options") if isinstance(raw_options, dict) else raw_options
+        )
+        options_list = options_list or []
+
+        option_count = len(options_list)
+        selected_count = sum(1 for opt in options_list if opt.get("selected"))
+
+        # Convert options to simplified string format
+        formatted_options = []
+        for opt in options_list:
+            status_parts = []
+            if opt.get("selected"):
+                status_parts.append("selected")
+            if opt.get("disabled", False):
+                status_parts.append("disabled")
+
+            status = f" ({', '.join(status_parts)})" if status_parts else ""
+
+            # Format: "index: value (text) status"
+            # If value is empty or same as text, just use text
+            index = opt.get("index", 0)
+            text = opt.get("text", "")
+            value = opt.get("value", "")
+
+            if not value or value == text:
+                formatted_options.append(f"{index}: {text}{status}")
+            else:
+                formatted_options.append(f"{index}: {value} ({text}){status}")
+
+        # Create a summary with sample options
+        summary_parts = [f"{dropdown_label} with {option_count} options"]
+        if selected_count > 0:
+            summary_parts[0] += f" ({selected_count} selected)"
+
+        # Add sample options to the summary if there are any options
+        if option_count > 0:
+            # Create sample of options to show
+            sample_options = self._select_sample_options(
+                options_list, formatted_options
+            )
+
+            # Add samples to summary
+            if sample_options:
+                if option_count > 5:
+                    summary_parts.append(
+                        f"Sample options ({len(sample_options)} of {option_count}):"
+                    )
+                else:
+                    summary_parts.append("Options:")
+                summary_parts.append("\n".join(sample_options))
+
+        # Create the result
+        result = {"options": formatted_options, "summary": "\n".join(summary_parts)}
+
+        # Add any additional metadata from the raw_options if it's a dict
+        if isinstance(raw_options, dict):
+            # Add any metadata fields except 'options' which we've already handled
+            for key, value in raw_options.items():
+                if key != "options" and key not in result:
+                    result[key] = value
+
+        return result
+
+    def _select_sample_options(self, raw_options, formatted_options) -> list[str]:
+        """
+        Selects a representative sample of options to display in the summary.
+        """
+        option_count = len(raw_options)
+
+        # Get selected options first in the sample
+        selected_indices = [
+            i for i, opt in enumerate(raw_options) if opt.get("selected")
+        ]
+        sample_indices = selected_indices[:3]  # Take up to 3 selected options
+
+        # Add more options to sample if needed (up to 5 total)
+        remaining_slots = 5 - len(sample_indices)
+        if remaining_slots > 0:
+            # Get indices that aren't already in the sample
+            other_indices = [i for i in range(option_count) if i not in sample_indices]
+
+            # Take a few from the beginning, middle, and end if there are many
+            if len(other_indices) > remaining_slots and len(other_indices) > 6:
+                middle_idx = len(other_indices) // 2
+                sample_indices.extend(
+                    [
+                        *other_indices[: remaining_slots // 2],  # Beginning
+                        *other_indices[middle_idx : middle_idx + 1],  # Middle
+                        *other_indices[-remaining_slots // 2 :],  # End
+                    ][:remaining_slots]
+                )  # Ensure we don't exceed
+            else:
+                # Just take the first few if not that many
+                sample_indices.extend(other_indices[:remaining_slots])
+
+        # Sort the indices to present them in order
+        sample_indices.sort()
+
+        # Collect sample options
+        return [formatted_options[i] for i in sample_indices]
+
+    async def _is_dropdown_expanded(self, page, xpath) -> dict:
+        """
+        Helper method to check if a dropdown is expanded.
+
+        Args:
+            page (Page): Playwright page
+            xpath (str): XPath to the dropdown trigger element
+
+        Returns:
+            dict: Information about the dropdown expansion state
+                {
+                    "expanded": bool,  # Whether the dropdown is expanded
+                    "by": str | None,  # What indicates it's expanded (aria, class, visible-container)
+                }
+        """
+        try:
+            return await page.evaluate(
+                """
+                (xpath) => {
+                    const el = document.evaluate(xpath, document, null, 
+                        XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
+                    if (!el) return {expanded: false};
+                    
+                    // Check if aria-expanded changed
+                    if (el.getAttribute('aria-expanded') === 'true') {
+                        return {expanded: true, by: 'aria'};
+                    }
+                    
+                    // Check for expanded classes
+                    if (el.classList.contains('expanded') || 
+                        el.classList.contains('open') || 
+                        el.classList.contains('active')) {
+                        return {expanded: true, by: 'class'};
+                    }
+                    
+                    // Check if any dropdown menu is now visible
+                    const possibleContainers = [
+                        el.nextElementSibling,
+                        ...Array.from(el.parentElement.querySelectorAll('ul.dropdown-menu, [role="listbox"], [role="menu"]')),
+                        ...Array.from(document.querySelectorAll(`[aria-labelledby="${el.id}"]`))
+                    ].filter(Boolean);
+                    
+                    for (const container of possibleContainers) {
+                        const style = window.getComputedStyle(container);
+                        if (style.display !== 'none' && style.visibility !== 'hidden') {
+                            return {
+                                expanded: true, 
+                                by: 'visible-container'
+                            };
+                        }
+                    }
+                    
+                    return {expanded: false};
+                }
+            """,
+                xpath,
+            )
+        except Exception as e:
+            logger.debug(f"Error checking dropdown expansion state: {str(e)}")
+            return {"expanded": False}
+
+    async def _open_dropdown(self, element_node, page) -> dict:
+        """
+        Opens a dropdown like a real user would, by trying multiple interaction methods.
+        """
+
+        result = {
+            "opened": False,
+            "method": None,
+            "frame_name": None,
+            "frame_index": None,
+        }
+
+        try:
+            # Get element handle and frame info
+            element_handle = await self.get_locate_element(element_node)
+            if not element_handle:
+                logger.debug("Could not locate element for dropdown opening")
+                return result
+
+            # Get frame info
+            try:
+                # More careful handling of frame name to avoid function object errors
+                frame_name = None
+
+                # First try to safely get frame name
+                if hasattr(page, "frame"):
+                    if hasattr(page.frame, "name"):
+                        try:
+                            # Check if it's a callable or a property
+                            if callable(page.frame.name):
+                                # It's a method, don't call it
+                                frame_name = (
+                                    page.frame.url
+                                    if hasattr(page.frame, "url")
+                                    else None
+                                )
+                            else:
+                                # It's a property
+                                frame_name = page.frame.name
+                        except Exception:
+                            # Fall back to URL if name access fails
+                            if hasattr(page.frame, "url"):
+                                frame_name = page.frame.url
+                    elif hasattr(page.frame, "url"):
+                        frame_name = page.frame.url
+
+                result["frame_name"] = frame_name
+
+                # Get frame index
+                if hasattr(page, "frames") and hasattr(page, "frame"):
+                    try:
+                        for i, frame in enumerate(page.frames):
+                            if frame == page.frame:
+                                result["frame_index"] = i
+                                break
+                    except Exception:
+                        pass
+            except Exception as e:
+                logger.debug(f"Error getting frame info: {str(e)}")
+
+            # First check if dropdown is already expanded
+            expand_check_result = await self._is_dropdown_expanded(
+                page, element_node.xpath
+            )
+
+            if expand_check_result.get("expanded"):
+                logger.debug("Dropdown appears to be already expanded")
+                result["opened"] = True
+                result["method"] = "already-open"
+                return result
+
+            # Strategy 1: Try clicking the element (most natural user interaction)
+            logger.debug("Attempting to open dropdown by clicking")
+            try:
+                await element_handle.click(timeout=1000)
+                await asyncio.sleep(
+                    0.5
+                )  # Longer pause to ensure animations/scripts complete
+
+                # Check if dropdown is now expanded using our helper method
+                expand_result = await self._is_dropdown_expanded(
+                    page, element_node.xpath
+                )
+
+                if expand_result.get("expanded"):
+                    logger.debug(
+                        f"Successfully opened dropdown by clicking, detected by: {expand_result.get('by')}"
+                    )
+                    result["opened"] = True
+                    result["method"] = "click"
+
+                    return result
+            except Exception as e:
+                logger.debug(f"Click method failed to open dropdown: {str(e)}")
+
+            # Strategy 2: Try keyboard interaction (for accessibility-compliant dropdowns)
+            logger.debug("Attempting to open dropdown with keyboard")
+            try:
+                # Focus the element first
+                await element_handle.focus()
+
+                # Try pressing Enter (common for buttons/dropdowns)
+                await page.keyboard.press("Enter")
+                await asyncio.sleep(0.1)
+
+                # Check if it worked using our helper method
+                expand_result = await self._is_dropdown_expanded(
+                    page, element_node.xpath
+                )
+
+                if expand_result.get("expanded"):
+                    logger.debug("Successfully opened dropdown with Enter key")
+                    result["opened"] = True
+                    result["method"] = "keyboard-enter"
+                    return result
+
+                # Try arrow down (common for selects and comboboxes)
+                await page.keyboard.press("ArrowDown")
+                await asyncio.sleep(0.1)
+
+                expand_result = await self._is_dropdown_expanded(
+                    page, element_node.xpath
+                )
+
+                if expand_result.get("expanded"):
+                    logger.debug("Successfully opened dropdown with ArrowDown key")
+                    result["opened"] = True
+                    result["method"] = "keyboard-arrowdown"
+                    return result
+
+                # Try space key (also common for buttons)
+                await page.keyboard.press(" ")
+                await asyncio.sleep(0.1)
+
+                expand_result = await self._is_dropdown_expanded(
+                    page, element_node.xpath
+                )
+
+                if expand_result.get("expanded"):
+                    logger.debug("Successfully opened dropdown with Space key")
+                    result["opened"] = True
+                    result["method"] = "keyboard-space"
+                    return result
+            except Exception as e:
+                logger.debug(f"Keyboard methods failed to open dropdown: {str(e)}")
+
+            # Strategy 3: Fall back to attribute modification (least reliable but worth trying)
+            logger.debug("Attempting to open dropdown by setting aria-expanded")
+            try:
+                # Set aria-expanded attribute directly
+                await page.evaluate(
+                    """(xpath) => {
+                    const el = document.evaluate(xpath, document, null, 
+                        XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
+                    if (el) el.setAttribute('aria-expanded', 'true');
+                }""",
+                    element_node.xpath,
+                )
+
+                await asyncio.sleep(0.1)  # Brief pause to let any scripts react
+
+                # Check if setting the attribute worked using our helper method
+                expand_result = await self._is_dropdown_expanded(
+                    page, element_node.xpath
+                )
+
+                if expand_result.get("expanded"):
+                    logger.debug("Successfully opened dropdown by setting attribute")
+                    result["opened"] = True
+                    result["method"] = "attribute"
+                    return result
+            except Exception as e:
+                logger.debug(f"Attribute method failed to open dropdown: {str(e)}")
+
+            logger.debug("All methods failed to open dropdown")
+            return result
+
+        except Exception as e:
+            logger.error(f"Error while trying to open dropdown: {str(e)}")
+            return result
+
+    async def _get_custom_dropdown_options(self, element_node, page):
+        """
+        Helper method to detect options in custom dropdowns.
+        First tries to open the dropdown like a user would, then extracts options.
+
+        Args:
+            element_node (DOMElementNode): The dropdown trigger element
+            page (Page): Playwright page
+
+        Returns:
+            dict: Dictionary with options and metadata about the dropdown
+                {
+                    "options": list,       # List of options with text, value, index
+                    "opened_by": str,      # Method used to open the dropdown
+                    "frame_name": str,     # Name of the frame containing the dropdown
+                    "frame_index": int,    # Index of the frame containing the dropdown
+                    "index_base": int      # Base index for dropdown options (usually 0)
+                }
+        """
+        try:
+            # First attempt to open the dropdown like a real user would
+            dropdown_info = await self._open_dropdown(element_node, page)
+
+            result = {
+                "options": [],
+                "opened_by": dropdown_info.get("method"),
+                "frame_name": dropdown_info.get("frame_name"),
+                "frame_index": dropdown_info.get("frame_index"),
+                "index_base": 0,  # Most custom dropdowns are 0-indexed
+            }
+
+            # Extract options from the dropdown
+            # In your Python function, replace container_script string with the following
+            container_script = """
+                (triggerXPath) => {
+                    // Constants (single source of truth)
+                    const OPTION_SELECTORS = 'li, [role="option"], [role="menuitem"], .dropdown-item, .option, .select-option, .menu-item, div[id^="item-"]';
+                    const CLICKABLE_FALLBACK = 'div[tabindex="0"], button, a';
+                    const CONTAINER_SELECTORS = '[role="listbox"], [role="menu"], [role="list"], ul.dropdown-menu, ul.options, .select-options, .dropdown-list';
+                    const TOLERANCE = 100;
+
+                    // Helpers
+                    const isVisible = (el) => {
+                        if (!el) return false;
+                        const style = window.getComputedStyle(el);
+                        if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
+                        const rect = el.getBoundingClientRect();
+                        return rect.width > 0 && rect.height > 0;
+                    };
+
+                    const mapOptions = (nodes) => {
+                        return Array.from(nodes).map((opt, idx) => {
+                            const text = (opt.textContent || '').trim();
+                            const value = opt.getAttribute('data-value') || opt.getAttribute('value') || opt.getAttribute('data-option') || opt.id || text;
+                            const selected = (opt.getAttribute && opt.getAttribute('aria-selected') === 'true') ||
+                                             opt.classList.contains('selected') ||
+                                             opt.classList.contains('active') ||
+                                             opt.getAttribute('aria-checked') === 'true';
+                            return { text, value, index: idx, selected: !!selected };
+                        });
+                    };
+
+                    const extractOptionsFromContainer = (container) => {
+                        if (!container) return [];
+                        // Try canonical option selectors
+                        let optionElements = container.querySelectorAll(OPTION_SELECTORS);
+                        if (optionElements && optionElements.length) return mapOptions(optionElements);
+
+                        // Fallback to clickable elements inside container
+                        let clickable = container.querySelectorAll(CLICKABLE_FALLBACK);
+                        if (clickable && clickable.length) return mapOptions(clickable);
+
+                        return [];
+                    };
+
+                    // Start: find trigger
+                    const triggerElement = document.evaluate(triggerXPath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
+                    if (!triggerElement) return [];
+
+                    // Use a Set to collect unique candidate containers
+                    const candidateSet = new Set();
+
+                    // Strategy A: aria-controls -> element by id
+                    if (triggerElement.hasAttribute && triggerElement.hasAttribute('aria-controls')) {
+                        const controlsId = triggerElement.getAttribute('aria-controls');
+                        if (controlsId) {
+                            const ctl = document.getElementById(controlsId);
+                            if (ctl) candidateSet.add(ctl);
+                        }
+                    }
+
+                    // Strategy B: sibling(s) of trigger (fast)
+                    let sibling = triggerElement.nextElementSibling;
+                    while (sibling) {
+                        candidateSet.add(sibling);
+                        sibling = sibling.nextElementSibling;
+                    }
+                    sibling = triggerElement.previousElementSibling;
+                    while (sibling) {
+                        candidateSet.add(sibling);
+                        sibling = sibling.previousElementSibling;
+                    }
+
+                    // Strategy C: containers inside parent and parent's siblings
+                    const parent = triggerElement.parentElement;
+                    if (parent) {
+                        // direct children containers
+                        const parentContainers = parent.querySelectorAll(CONTAINER_SELECTORS);
+                        parentContainers.forEach(el => candidateSet.add(el));
+
+                        // parent's sibling containers (if any)
+                        const grandParent = parent.parentElement;
+                        if (grandParent) {
+                            Array.from(grandParent.children).forEach(sib => {
+                                if (sib !== parent) {
+                                    const sibContainers = sib.querySelectorAll(CONTAINER_SELECTORS);
+                                    sibContainers.forEach(el => candidateSet.add(el));
+                                }
+                            });
+                        }
+                    }
+
+                    // Strategy D: related containers via attributes (data-parent-id, aria-labelledby, aria-controls referencing trigger id)
+                    if (triggerElement.id) {
+                        const related = document.querySelectorAll(`[aria-labelledby="${triggerElement.id}"], [aria-controls="${triggerElement.id}"], [data-parent-id="${triggerElement.id}"], [data-target="${triggerElement.id}"]`);
+                        related.forEach(el => candidateSet.add(el));
+                    }
+                    if (triggerElement.dataset && triggerElement.dataset.id) {
+                        const related2 = document.querySelectorAll(`[data-parent-id="${triggerElement.dataset.id}"], [data-target="${triggerElement.dataset.id}"]`);
+                        related2.forEach(el => candidateSet.add(el));
+                    }
+
+                    // Evaluate candidates quickly (prefer ones that are visible and produce options)
+                    for (const container of candidateSet) {
+                        try {
+                            if (!container) continue;
+                            if (!isVisible(container)) continue;
+                            const options = extractOptionsFromContainer(container);
+                            if (options && options.length) return options;
+                        } catch (err) {
+                            // ignore and continue
+                        }
+                    }
+
+                    // Strategy E: broader but filtered search - visible containers near trigger
+                    const triggerRect = triggerElement.getBoundingClientRect();
+                    const allPotential = Array.from(document.querySelectorAll(CONTAINER_SELECTORS));
+                    const visibleNearby = allPotential.filter(container => {
+                        if (!isVisible(container)) return false;
+                        const rect = container.getBoundingClientRect();
+                        const below = rect.top >= triggerRect.bottom - TOLERANCE;
+                        const horizontallyAligned = (rect.left >= triggerRect.left - TOLERANCE && rect.left <= triggerRect.right + TOLERANCE) ||
+                                                    (rect.right >= triggerRect.left - TOLERANCE && rect.right <= triggerRect.right + TOLERANCE);
+                        return below && horizontallyAligned;
+                    });
+
+                    for (const container of visibleNearby) {
+                        const options = extractOptionsFromContainer(container);
+                        if (options && options.length) return options;
+                    }
+
+                    // Final fallback: visible option-like elements (position filtered)
+                    const allVisibleItems = Array.from(document.querySelectorAll(OPTION_SELECTORS)).filter(el => {
+                        if (!isVisible(el)) return false;
+                        const rect = el.getBoundingClientRect();
+                        const isBelow = rect.top >= triggerRect.bottom - TOLERANCE;
+                        const isNotTrigger = el !== triggerElement;
+                        return isBelow && isNotTrigger;
+                    });
+
+                    if (allVisibleItems && allVisibleItems.length) return mapOptions(allVisibleItems);
+
+                    return [];
+                }
+                """
+
+            options = await page.evaluate(container_script, element_node.xpath)
+
+            result["options"] = options or []
+            return result
+
+        except Exception as e:
+            logger.error(f"Error detecting custom dropdown options: {str(e)}")
+            return {
+                "options": [],
+                "opened_by": None,
+                "frame_name": None,
+                "frame_index": None,
+                "index_base": 0,
+            }
 
     @time_execution_async("--get_tabs_info")
     async def get_tabs_info(self) -> list[TabInfo]:
@@ -2263,7 +3630,11 @@ class BrowserContext:
         if not index:
             return None
         selector_map = await self.get_selector_map()
-        return selector_map[index]
+        try:
+            value = selector_map[index]
+        except KeyError:
+            return None
+        return value
 
     async def save_cookies(self):
         """Save current cookies to file"""
@@ -2283,8 +3654,7 @@ class BrowserContext:
                     await f.write(json.dumps(cookies))
             except Exception as e:
                 logger.warning(f"❌  Failed to save cookies: {str(e)}")
-                
-    
+
     async def is_text_field_focused(self, page: "Page") -> bool:
         """
         Checks if a text field element is currently focused in the browser.
@@ -2372,39 +3742,6 @@ class BrowserContext:
         pixels_above = scroll_y
         pixels_below = total_height - (scroll_y + viewport_height)
         return pixels_above, pixels_below
-
-    async def _scroll_container(self, pixels: int) -> None:
-        """Scroll the element that truly owns vertical scroll.Starts at the focused node ➜ climbs to the first big, scroll-enabled ancestor otherwise picks the first scrollable element or the root, then calls `element.scrollBy` (or `window.scrollBy` for the root) by the supplied pixel value."""
-
-        page = await self.get_agent_current_page()
-
-        # An element can *really* scroll if: overflow-y is auto|scroll|overlay, it has more content than fits, its own viewport is not a postage stamp (more than 50 % of window).
-        SMART_SCROLL_JS = """(dy) => {
-            const bigEnough = el => el.clientHeight >= window.innerHeight * 0.5;
-            const canScroll = el =>
-                el &&
-                /(auto|scroll|overlay)/.test(getComputedStyle(el).overflowY) &&
-                el.scrollHeight > el.clientHeight &&
-                bigEnough(el);
-
-            let el = document.activeElement;
-            while (el && !canScroll(el) && el !== document.body) el = el.parentElement;
-
-            el = canScroll(el)
-                    ? el
-                    : [...document.querySelectorAll('*')].find(canScroll)
-                    || document.scrollingElement
-                    || document.documentElement;
-
-            if (el === document.scrollingElement ||
-                el === document.documentElement ||
-                el === document.body) {
-                window.scrollBy(0, dy);
-            } else {
-                el.scrollBy({ top: dy, behavior: 'auto' });
-            }
-        }"""
-        await page.evaluate(SMART_SCROLL_JS, pixels)
 
     async def reset_context(self):
         """Reset the browser session
