@@ -21,13 +21,13 @@ class Animator:
         self.page = page
 
         # script
-        self.animator_script = """
+        self.animator_script = r"""
         (() => {
             // Setup styles and cursor
             if (window.playwrightAnimationsSetup) return;
             
             const styles = `
-                #playwright-cursor { position: fixed; pointer-events: none; z-index: 2147483647; transition: top 0.15s cubic-bezier(0.65, 0, 0.35, 1), left 0.15s cubic-bezier(0.65, 0, 0.35, 1); }
+                #playwright-cursor { position: absolute; pointer-events: none; z-index: 2147483647; transition: top 0.15s cubic-bezier(0.65, 0, 0.35, 1), left 0.15s cubic-bezier(0.65, 0, 0.35, 1); }
                 .playwright-cursor-icon { width: 27px; height: 27px; background-repeat: no-repeat; background-size: contain; transform: translate(-50%, -50%); filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5)); display: none; }
                 #playwright-cursor-pointer-icon { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 24 24'%3E%3Cpath fill='black' stroke='black' stroke-width='2' d='M5.5 3.21V20.8c0 .45.54.67.85.35l4.86-4.86a.5.5 0 0 1 .35-.15h6.87a.5.5 0 0 0 .35-.85L6.35 2.85a.5.5 0 0 0-.85.35Z'/%3E%3C/svg%3E"); }
                 #playwright-cursor-text-icon { width: 2px; height: 22px; background-color: black; animation: blink 1s infinite; filter: none; }
@@ -46,7 +46,47 @@ class Animator:
                 @keyframes press-effect { 0% { transform: translate(-50%, -50%) scale(1); } 50% { transform: translate(-50%, -50%) scale(0.5); } 100% { transform: translate(-50%, -50%) scale(1); } }
                 .icon-fade-in { animation: fade-in 0.3s ease-out forwards; }
                 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
-                #playwright-cursor-textbox { position: absolute; background: rgba(255, 255, 255, 0.2); border-radius: 12px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.3); color: #333; padding: 6px 12px; font-family: 'Quicksand', sans-serif; font-size: 14px; font-weight: 500; transition: all 0.3s ease-out; max-width: 375px; word-wrap: break-word; opacity: 0; }
+                
+                #playwright-cursor-textbox {
+                    position: absolute;
+                    background: rgba(255, 255, 255, 0.4);
+                    backdrop-filter: blur(12px);
+                    -webkit-backdrop-filter: blur(12px);
+                    border-radius: 12px;
+                    border: 1px solid rgba(255, 255, 255, 0.3);
+                    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1),
+                                inset 0 1px 0 rgba(255, 255, 255, 0.5),
+                                inset 0 -1px 0 rgba(255, 255, 255, 0.1);
+                    color: #333;
+                    padding: 6px 12px;
+                    font-family: 'Quicksand', sans-serif;
+                    font-size: 14px;
+                    font-weight: 500;
+                    transition: all 0.3s ease-out;
+                    max-width: 375px;
+                    word-wrap: break-word;
+                    opacity: 0;
+                    overflow: hidden;
+                }
+                #playwright-cursor-textbox::before {
+                    content: '';
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    height: 1px;
+                    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.8), transparent);
+                }
+                #playwright-cursor-textbox::after {
+                    content: '';
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    width: 1px;
+                    height: 100%;
+                    background: linear-gradient(180deg, rgba(255, 255, 255, 0.8), transparent, rgba(255, 255, 255, 0.3));
+                }
+
                 .textbox-appear { opacity: 1 !important; transform: translateY(0) !important; }
                 .playwright-cursor-label { position: absolute; top: 10px; left: 10px; background: rgba(255, 255, 255, 0.2); border-radius: 12px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.3); color: #333; padding: 4px 8px; font-family: 'Quicksand', sans-serif; font-size: 12px; font-weight: 500; }
                 .splash-line { position: absolute; width: 3.5px; pointer-events: none; background-color: #2d3748; border-radius: 9999px; transform-origin: top center; z-index: 2147483646; animation: line-clip-and-retract 0.4s cubic-bezier(0.5, 1, 0.9, 1) forwards; }
@@ -266,23 +306,60 @@ class Animator:
                 }
                 .playwright-log-entry {
                     display: flex;
-                    align-items: center;
+                    align-items: flex-start;
                     gap: 8px;
-                    background: rgba(255, 255, 255, 0.2);
+                    background: rgba(255, 255, 255, 0.4);
+                    backdrop-filter: blur(12px);
+                    -webkit-backdrop-filter: blur(12px);
                     border-radius: 12px;
-                    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-                    backdrop-filter: blur(10px);
-                    -webkit-backdrop-filter: blur(10px);
                     border: 1px solid rgba(255, 255, 255, 0.3);
+                    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1),
+                                inset 0 1px 0 rgba(255, 255, 255, 0.5),
+                                inset 0 -1px 0 rgba(255, 255, 255, 0.1);
                     color: #333;
                     padding: 8px 12px;
                     font-family: 'Quicksand', sans-serif;
                     font-size: 14px;
                     font-weight: 500;
                     max-width: 375px;
-                    word-wrap: break-word;
                     animation: log-fade-in 0.3s ease-out forwards;
+                    position: relative;
+                    overflow: hidden;
                 }
+                .playwright-log-entry .log-text-content {
+                    word-wrap: break-word;
+                    flex-grow: 1;
+                }
+                .playwright-log-entry pre {
+                    background-color: rgba(0,0,0,0.05);
+                    border-radius: 6px;
+                    padding: 8px;
+                    margin: 6px 0;
+                    font-family: 'Fira Code', monospace;
+                    font-size: 12px;
+                    white-space: pre-wrap;
+                    word-break: break-all;
+                }
+
+                .playwright-log-entry::before {
+                    content: '';
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    height: 1px;
+                    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.8), transparent);
+                }
+                .playwright-log-entry::after {
+                    content: '';
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    width: 1px;
+                    height: 100%;
+                    background: linear-gradient(180deg, rgba(255, 255, 255, 0.8), transparent, rgba(255, 255, 255, 0.3));
+                }
+
                 .playwright-log-entry.fade-out {
                     animation: log-fade-out 0.5s ease-in forwards;
                 }
@@ -292,6 +369,7 @@ class Animator:
                     background-size: contain;
                     background-repeat: no-repeat;
                     flex-shrink: 0;
+                    margin-top: 2px;
                 }
                 @keyframes log-fade-in {
                     from { opacity: 0; transform: translateX(20px); }
@@ -351,7 +429,8 @@ class Animator:
                     cursor.appendChild(textBoxElement);
                 }
                 
-                textBoxElement.innerHTML = text;
+                // --- FIX: Use textContent for safety ---
+                textBoxElement.textContent = text;
                 textBoxElement.classList.add('textbox-appear');
 
                 document.querySelectorAll('.playwright-cursor-icon').forEach(icon => icon.style.display = 'none');
@@ -429,7 +508,7 @@ class Animator:
                 const thumbnailElement = document.createElement('div');
                 thumbnailElement.id = 'screenshot-thumbnail';
                 
-                thumbnailElement.innerHTML = `
+                const thumbnailHTML = `
                     <div class="mock-browser">
                         <div class="mock-browser-header">
                             <div class="mock-close-buttons">
@@ -494,6 +573,12 @@ class Animator:
                     </div>
                 `;
                 
+                const doc = new DOMParser().parseFromString(thumbnailHTML, 'text/html');
+                const mockBrowser = doc.body.firstChild;
+                if (mockBrowser) {
+                    thumbnailElement.appendChild(mockBrowser);
+                }
+                
                 document.body.appendChild(thumbnailElement);
 
                 if (sound_effect && window.Tone) {
@@ -541,11 +626,31 @@ class Animator:
                 const icon = document.createElement('div');
                 icon.className = `log-icon log-icon-${level}`;
                 
-                const textNode = document.createElement('span');
-                textNode.textContent = text;
+                const textContent = document.createElement('div');
+                textContent.className = 'log-text-content';
+
+                // Regex to find JSON-like structures
+                const jsonRegex = /({.*?}|\[.*?\])/g;
+                const parts = text.split(jsonRegex);
+
+                parts.forEach(part => {
+                    if (part.trim().startsWith('{') || part.trim().startsWith('[')) {
+                        try {
+                            const jsonObj = JSON.parse(part);
+                            const pre = document.createElement('pre');
+                            pre.textContent = JSON.stringify(jsonObj, null, 2);
+                            textContent.appendChild(pre);
+                        } catch (e) {
+                            // If parsing fails, treat it as plain text
+                            textContent.appendChild(document.createTextNode(part));
+                        }
+                    } else {
+                        textContent.appendChild(document.createTextNode(part));
+                    }
+                });
                 
                 logEntry.appendChild(icon);
-                logEntry.appendChild(textNode);
+                logEntry.appendChild(textContent);
                 logContainer.prepend(logEntry);
 
                 setTimeout(() => {
@@ -553,7 +658,7 @@ class Animator:
                     logEntry.addEventListener('animationend', () => {
                         logEntry.remove();
                     });
-                }, 5000);
+                }, 15000);
             };
 
             // --- Main Cursor Animation Function ---
@@ -626,8 +731,22 @@ class Animator:
                         indicator.style.left = `${endX}px`;
                         indicator.style.top = `${endY}px`;
                         indicator.style.animation = `scroll-${direction} 0.4s ease-out forwards`;
-                        if (direction === 'down') indicator.innerHTML = `<svg width="10" height="30" viewBox="0 0 10 30"><line x1="5" y1="0" x2="5" y2="20" stroke="rgba(0,0,0,0.4)" stroke-width="4" stroke-linecap="round"/><path d="M0 20 L5 30 L10 20 Z" fill="rgba(0,0,0,0.4)"/></svg>`;
-                        else if (direction === 'up') indicator.innerHTML = `<svg width="10" height="30" viewBox="0 0 10 30"><path d="M0 10 L5 0 L10 10 Z" fill="rgba(0,0,0,0.4)"/><line x1="5" y1="10" x2="5" y2="30" stroke="rgba(0,0,0,0.4)" stroke-width="4" stroke-linecap="round"/></svg>`;
+                        
+                        let svgString;
+                        if (direction === 'down') {
+                            svgString = `<svg width="10" height="30" viewBox="0 0 10 30"><line x1="5" y1="0" x2="5" y2="20" stroke="rgba(0,0,0,0.4)" stroke-width="4" stroke-linecap="round"/><path d="M0 20 L5 30 L10 20 Z" fill="rgba(0,0,0,0.4)"/></svg>`;
+                        } else if (direction === 'up') {
+                            svgString = `<svg width="10" height="30" viewBox="0 0 10 30"><path d="M0 10 L5 0 L10 10 Z" fill="rgba(0,0,0,0.4)"/><line x1="5" y1="10" x2="5" y2="30" stroke="rgba(0,0,0,0.4)" stroke-width="4" stroke-linecap="round"/></svg>`;
+                        }
+                        
+                        if (svgString) {
+                            const doc = new DOMParser().parseFromString(svgString, 'text/html');
+                            const svgElement = doc.body.firstChild;
+                            if(svgElement) {
+                                indicator.appendChild(svgElement);
+                            }
+                        }
+
                         document.body.appendChild(indicator);
                         const timer = setTimeout(() => indicator.remove(), 400);
                         window.playwrightTimers.add(timer);
