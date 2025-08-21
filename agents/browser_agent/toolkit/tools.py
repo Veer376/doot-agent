@@ -10,8 +10,12 @@ from .utils import get_extraction_plan
 from readability import Document
 from .types import ActionResult
 from logging_utils import BrowserLogger as Logger
+import math
+import asyncio
+from typing import Annotated
 
 logger = get_toolkit_logger("tools")
+
 
 @tool_registry.register()
 async def type_text(
@@ -20,7 +24,7 @@ async def type_text(
     press_enter: bool,
     browser_context: Annotated[BrowserContext | None, InjectedToolArg] = None,
 ) -> ActionResult:
-    """Types text into a focused text field, identified by its numbered label."""
+    """Types text into a focused text field or search and select the dropdown option, identified by its numbered label."""
 
     element_node = await browser_context.get_dom_element_by_index(element_index)
 
@@ -81,7 +85,7 @@ async def type_text(
                     f"ATTENTION: Element {element_index}({element_description}) is a dropdown menu. "
                     f"I've attempted to handle it by searching and selecting an option using keyboard input. "
                     "Please review the current selection against all available options below. "
-                    "If the selected option does not match your intent, use the select_dropdown_option tool with the correct option_index instead. "
+                    "If you want to select another option, use the dropdown tool. "
                 )
                 return ActionResult(
                     message=message,
@@ -159,43 +163,16 @@ async def click_element(
     element_index: int,
     browser_context: Annotated[BrowserContext | None, InjectedToolArg] = None,
 ) -> ActionResult:
-    """Clicks an interactive element, such as a button or link, identified by its numbered label."""
+    """Clicks an interactive element, such as a dropdown or button, identified by its numbered label."""
 
     try:
         element_node = await browser_context.get_dom_element_by_index(element_index)
 
         if not element_node:
-            logger.debug(f"Element with index {element_index} not found.", browser_context)
+            logger.debug(
+                f"Element with index {element_index} not found.", browser_context
+            )
             return ActionResult(error=f"Element index {element_index} not found.")
-
-        dropdown_info = await browser_context.is_element_dropdown(element_node)
-        if dropdown_info.get("is_dropdown", False):
-
-            logger.info(
-                f"Element {element_index}({element_node.get_description()}) is a dropdown.",
-                browser_context,
-            )
-            asyncio.create_task(
-                browser_context.animator.dropdown(
-                    element_node, text="Getting dropdown options"
-                )
-            )
-
-            dropdown_details = await browser_context.get_dropdown_details(element_node)
-            message = (
-                f"ACTION REQUIRED: Element {element_index}({element_node.get_description()}) is a dropdown menu "
-                "that cannot be handled with a simple click. "
-                "Please examine the available options below and use the select_dropdown_option tool "
-                "with the appropriate option_index parameter to make your selection."
-            )
-            return ActionResult(
-                message=message,
-                data={
-                    "selected_options": dropdown_details.get("selected_options", []),
-                    "options": dropdown_details.get("options", []),
-                },
-                reserve_tools=["select_dropdown_option"],
-            )
 
         session = await browser_context.get_session()
         initial_pages = len(session.context.pages)
@@ -223,7 +200,42 @@ async def click_element(
             new_tab_msg = "New tab opened"
             message += f" - {new_tab_msg}"
             await browser_context.switch_to_tab(-1)
+            
+        else:
+            try:
+                dropdown_info = await browser_context.is_element_dropdown(element_node)
+                if dropdown_info.get("is_dropdown", False):
 
+                    # logger.info(
+                    #     f"Element {element_index}({element_node.get_description()}) is a dropdown.",
+                    #     browser_context,
+                    # )
+                    asyncio.create_task(
+                        browser_context.animator.dropdown(
+                            element_node, text="Getting dropdown options"
+                        )
+                    )
+
+                    dropdown_details = await browser_context.get_dropdown_details(element_node)
+                    message = (
+                        f"BE AWARE: Element ({element_node.get_description()}) is also a dropdown. "
+                        "If you think the dropdown options are not marked with numbered labels "
+                        "or desired option is not visible, use select_dropdown_tool."
+                    )
+                    page = await browser_context.get_agent_current_page()
+                    await page.keyboard.press("Escape")
+                    return ActionResult(
+                        message=message,
+                        data={
+                            "selected_options": dropdown_details.get("selected_options", []),
+                            "options": dropdown_details.get("options", []),
+                        },
+                        reserve_tools=["select_dropdown_option"],
+                    )
+                    
+            except Exception as e:
+                logger.error(f"Failed to get dropdown details: {str(e)}", browser_context)
+                
         return ActionResult(message=message)
 
     except Exception as e:
@@ -508,12 +520,10 @@ async def extract(
 @tool_registry.register()
 async def finish_task(
     is_task_completed: bool,
-    reason: str = Field(
-        description="The detailed reason why the task is considered finished."
-    ),
+    reason: str,
     browser_context: Annotated[BrowserContext | None, InjectedToolArg] = None,
 ) -> ActionResult:
-    """Finishes the running task."""
+    """Finishes the running task. Provide a reason that why you can't complete the task."""
     logger.info(
         f"Task {'Completed' if is_task_completed else 'Failed'}, reason: {reason}",
         browser_context,
@@ -541,264 +551,259 @@ async def press_keys(
 @tool_registry.register()
 async def scroll(
     bounding_box: list[int],
+    scroll_pixels: int,
     direction: str,
-    scroll_area: str,
+    scroll_area_label: str,
     browser_context: Annotated[BrowserContext | None, InjectedToolArg] = None,
 ) -> ActionResult:
-    """Scrolls within a specific area defined by a bounding box.
-    Use this for scrollable non-labeled area/section of the page.
-    The bounding_box should be [ymin, xmin, ymax, xmax] normalized to 0-1000"""
+    """
+    Scrolls within a specific area defined by a bounding box.
+    Use for scrollable non-labeled areas/sections of the page.
 
+    bounding_box: [ymin, xmin, ymax, xmax] normalized to 0-1000
+    scroll_pixels: positive integer number of pixels to attempt to scroll
+    direction: oneOf ["up", "down", "left", "right"]
+    scroll_area_label: human-readable identifier of scroll target. e.g. "full page", "job section", "list of items in cart"
+    """
     try:
-        # Get the current page and verify it exists
+        # --- Basic sanity checks & get page ---
         page = await browser_context.get_agent_current_page()
+        
         if not page:
             return ActionResult(error="No active page found")
-
-        if page.viewport_size:
-            viewport = page.viewport_size
-        else:
-            viewport = await page.evaluate(
-                "() => ({ width: window.innerWidth, height: window.innerHeight })"
-            )
-
-        if not viewport:
-            logger.error("Could not determine viewport size", browser_context)
-            return ActionResult(error="Could not determine viewport size")
-
-        height, width = viewport.get("height"), viewport.get("width")
+        
+        direction = (direction or "").lower()
+        if direction not in ("up", "down", "left", "right"):
+            return ActionResult(error="direction must be one of 'up', 'down', 'left', 'right'")
 
         ymin, xmin, ymax, xmax = bounding_box
 
-        # Calculate target coordinates
+        # --- Determine viewport size (width,height) ---
+        if page.viewport_size:
+            viewport = page.viewport_size
+            width = viewport.get("width")
+            height = viewport.get("height")
+        else:
+            viewport = await page.evaluate("() => ({ width: window.innerWidth, height: window.innerHeight })")
+            width = viewport.get("width")
+            height = viewport.get("height")
+
+        if not (isinstance(width, (int, float)) and isinstance(height, (int, float)) and width > 0 and height > 0):
+            logger.error("Could not determine viewport size", browser_context)
+            return ActionResult(error="Could not determine viewport size")
+
+        # --- Compute central point in page viewport coordinates ---
         try:
-            y = ((ymin + ymax) / 2) / 1000 * height
-            x = ((xmin + xmax) / 2) / 1000 * width
+            center_x = ((xmin + xmax) / 2.0) / 1000.0 * width
+            center_y = ((ymin + ymax) / 2.0) / 1000.0 * height
+        except Exception as e:
+            logger.error(f"Error calculating coordinates: {e}", browser_context)
+            return ActionResult(error=f"Error calculating scroll coordinates: {e}")
 
-            # Validate coordinates are finite numbers
-            if not (isinstance(x, (int, float)) and isinstance(y, (int, float)) and
-                    x > 0 and y > 0 and x < width and y < height and
-                    x != float('inf') and y != float('inf') and
-                    x != float('-inf') and y != float('-inf') and
-                    not math.isnan(x) and not math.isnan(y)):
-                logger.error(f"Invalid coordinates calculated: x={x}, y={y}", browser_context)
-                return ActionResult(error=f"Invalid scroll coordinates. Please check the bounding box values.")
-        except (TypeError, ZeroDivisionError, ValueError) as e:
-            logger.error(f"Error calculating coordinates: {str(e)}", browser_context)
-            return ActionResult(error=f"Error calculating scroll coordinates: {str(e)}")
+        # Validate finite & inside viewport
+        if not (math.isfinite(center_x) and math.isfinite(center_y)):
+            logger.error(f"Invalid coordinates calculated: x={center_x}, y={center_y}", browser_context)
+            return ActionResult(error="Invalid scroll coordinates (not finite)")
 
-        # Instead of checking scrollability first, we'll get information about the page/element
-        # for scroll position tracking but assume it's scrollable
-        is_area_scrollable = await page.evaluate(
-            """
-            function(x, y) {
-                // Validate coordinates
-                if (!isFinite(x) || !isFinite(y) || x < 0 || y < 0) {
-                    console.error("Invalid coordinates:", x, y);
-                    return { 
-                        scrollable: true, 
-                        element: null,
-                        maxScroll: 10000, // Some arbitrary large value
-                        scrollTop: window.pageYOffset || document.documentElement.scrollTop
-                    };
-                }
-                
-                // Get the element at the specified coordinates
-                let element = document.elementFromPoint(x, y);
-                
-                // If no element found, default to document scrolling
-                if (!element) {
-                    return { 
-                        scrollable: true, 
-                        element: null,
-                        maxScroll: 10000, // Some arbitrary large value
-                        scrollTop: window.pageYOffset || document.documentElement.scrollTop
-                    };
-                }
-                
-                // Try to find scrollable parent
-                let current = element;
-                let scrollElement = null;
-                let scrollTop = 0;
-                let maxScroll = 0;
-                
-                // Check various elements in the hierarchy for scroll info
-                while (current && current !== document.body && current !== document.documentElement) {
-                    if (current.scrollHeight > current.clientHeight) {
-                        scrollElement = current;
-                        scrollTop = current.scrollTop;
-                        maxScroll = current.scrollHeight - current.clientHeight;
-                        break;
-                    }
-                    current = current.parentElement;
-                }
-                
-                // If no scrollable element found in hierarchy, use document
-                if (!scrollElement) {
-                    const docScrollHeight = document.documentElement.scrollHeight || document.body.scrollHeight;
-                    const docClientHeight = document.documentElement.clientHeight || window.innerHeight;
-                    scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-                    maxScroll = docScrollHeight - docClientHeight;
-                }
-                
-                // Always return scrollable=true to bypass the check
-                return {
-                    scrollable: true,
-                    element: scrollElement,
-                    scrollTop: scrollTop,
-                    maxScroll: maxScroll
-                };
-            }
-        """,
-            {"x": x, "y": y}
-        )
+        if not (0 <= center_x < width and 0 <= center_y < height):
+            logger.error(f"Coordinates out of viewport: x={center_x}, y={center_y}, width={width}, height={height}", browser_context)
+            return ActionResult(error="Computed scroll coordinates are outside the viewport")
 
-        # Move mouse to target area
-        asyncio.create_task(
-            browser_context.animator.scroll(
-                direction,
-                coords={"x": x, "y": y},
-                text="Scrolling using spatial understanding",
-            )
-        )
-
-        # Get scroll position before scrolling
-        scroll_before = await page.evaluate(
-            """
-            function(params) {
-                const x = params.x;
-                const y = params.y;
-                const isDocScroll = params.isDocScroll;
-                
-                // Validate coordinates
-                if (!isFinite(x) || !isFinite(y) || x < 0 || y < 0) {
-                    console.error("Invalid coordinates:", x, y);
-                    return 0;
-                }
-                
-                try {
-                    if (isDocScroll) {
-                        return window.pageYOffset || document.documentElement.scrollTop;
-                    } else {
-                        // Try to find the most appropriate scrollable element at coordinates
-                        const el = document.elementFromPoint(x, y);
-                        if (!el) return window.pageYOffset || document.documentElement.scrollTop;
-                        
-                        // Check if the element or its parents have scrollTop
-                        let current = el;
-                        while (current && current !== document.body && current !== document.documentElement) {
-                            if (current.scrollHeight > current.clientHeight) {
-                                return current.scrollTop;
-                            }
-                            current = current.parentElement;
-                        }
-                        
-                        // Default to document scroll
-                        return window.pageYOffset || document.documentElement.scrollTop;
-                    }
-                } catch (e) {
-                    console.error("Error getting scroll position:", e);
-                    return 0;
-                }
-            }
-        """,
-            {"x": x, "y": y, "isDocScroll": is_area_scrollable["element"] is None}
-        )
-
-        # Perform the scroll
-        amount = 700
-        scroll_delta_y = amount if direction == "down" else -amount
-        # FIXME: Use the locator to run scrollBy or scrollTop += delta on the exact element rather than rely on mouse.wheel
-        await page.mouse.move(x, y)
-        await page.mouse.wheel(0, scroll_delta_y)
-        await page.wait_for_timeout(500)
-
-        # Get scroll position after scrolling
-        scroll_after = await page.evaluate(
-            """
-            function(params) {
-                const x = params.x;
-                const y = params.y;
-                const isDocScroll = params.isDocScroll;
-                
-                // Validate coordinates
-                if (!isFinite(x) || !isFinite(y) || x < 0 || y < 0) {
-                    console.error("Invalid coordinates:", x, y);
-                    return 0;
-                }
-                
-                try {
-                    if (isDocScroll) {
-                        return window.pageYOffset || document.documentElement.scrollTop;
-                    } else {
-                        // Try to find the most appropriate scrollable element at coordinates
-                        const el = document.elementFromPoint(x, y);
-                        if (!el) return window.pageYOffset || document.documentElement.scrollTop;
-                        
-                        // Check if the element or its parents have scrollTop
-                        let current = el;
-                        while (current && current !== document.body && current !== document.documentElement) {
-                            if (current.scrollHeight > current.clientHeight) {
-                                return current.scrollTop;
-                            }
-                            current = current.parentElement;
-                        }
-                        
-                        // Default to document scroll
-                        return window.pageYOffset || document.documentElement.scrollTop;
-                    }
-                } catch (e) {
-                    console.error("Error getting scroll position:", e);
-                    return 0;
-                }
-            }
-        """,
-            {"x": x, "y": y, "isDocScroll": is_area_scrollable["element"] is None}
-        )
-
-        actual_scroll = abs(scroll_after - scroll_before)
-
-        # Determine remaining scroll
-        max_remaining = 0
+        # --- Prepare scroll deltas ---
+        dx = 0
+        dy = 0
         if direction == "down":
-            max_remaining = is_area_scrollable["maxScroll"] - scroll_after
-        else:  # Scrolling up
-            max_remaining = scroll_after
+            dy = abs(int(scroll_pixels))
+        elif direction == "up":
+            dy = -abs(int(scroll_pixels))
+        elif direction == "right":
+            dx = abs(int(scroll_pixels))
+        elif direction == "left":
+            dx = -abs(int(scroll_pixels))
 
-        # Build informative message
-        if actual_scroll < 50:  # Very little or no scroll happened
-            if max_remaining < 10:  # Essentially at the limit
-                logger.debug(f"Scroll Limit Reached", browser_context)
-                return ActionResult(
-                    message=(
-                        f"SCROLL LIMIT REACHED: You've reached the {direction == 'down' and 'bottom' or 'top'} of {scroll_area}. "
-                        f"No further scrolling possible {direction}wards. "
-                        "Figure out the next appropriate action to take to continue the task."
-                    )
+        try:
+            asyncio.create_task(
+                browser_context.animator.scroll(
+                    direction,
+                    coords={"x": center_x, "y": center_y},
+                    text=f"Scroll: {scroll_area_label}"
                 )
+            )
+        except Exception:
+            # animator failure should not stop the scroll
+            pass
+
+        # --- Single evaluate that finds element, performs scroll and returns structured result ---
+        js_result = await page.evaluate(
+            """(params) => {
+                const {x, y, dx, dy} = params
+                // run as async to allow small timeout after scroll
+                return (async () => {
+                    function isFiniteNumber(n){ return typeof n === 'number' && isFinite(n); }
+                    if (!isFiniteNumber(x) || !isFiniteNumber(y) || x < 0 || y < 0) {
+                        return { error: 'invalid-coordinates' };
+                    }
+
+                    // Find topmost element at the viewport coordinates
+                    let el = document.elementFromPoint(x, y);
+
+                    // Helper to check overflow-scrollability
+                    function isOverflowScrollable(node) {
+                        try {
+                            const style = window.getComputedStyle(node);
+                            const overflowY = style.overflowY || style.overflow;
+                            const overflowX = style.overflowX || style.overflow;
+                            const yOk = /auto|scroll|overlay/.test(overflowY);
+                            const xOk = /auto|scroll|overlay/.test(overflowX);
+                            return { yOk, xOk };
+                        } catch (e) {
+                            return { yOk: false, xOk: false };
+                        }
+                    }
+
+                    // Walk up to find the first scrollable container for the requested axis
+                    let scrollEl = null;
+                    let axis = (Math.abs(dy) > 0) ? 'y' : 'x';
+                    let current = el;
+                    while (current) {
+                        if (current === document.body || current === document.documentElement) break;
+                        const overflow = isOverflowScrollable(current);
+                        if (axis === 'y') {
+                            if (current.scrollHeight > current.clientHeight && overflow.yOk) {
+                                scrollEl = current;
+                                break;
+                            }
+                        } else {
+                            if (current.scrollWidth > current.clientWidth && overflow.xOk) {
+                                scrollEl = current;
+                                break;
+                            }
+                        }
+                        current = current.parentElement;
+                    }
+
+                    // If none found, fallback to document.scrollingElement (or html)
+                    if (!scrollEl) {
+                        scrollEl = document.scrollingElement || document.documentElement || document.body;
+                    }
+
+                    // Collect before state
+                    const beforeTop = scrollEl.scrollTop;
+                    const beforeLeft = scrollEl.scrollLeft;
+                    const maxScrollY = Math.max(0, (scrollEl.scrollHeight || document.documentElement.scrollHeight) - (scrollEl.clientHeight || window.innerHeight));
+                    const maxScrollX = Math.max(0, (scrollEl.scrollWidth || document.documentElement.scrollWidth) - (scrollEl.clientWidth || window.innerWidth));
+
+                    // Perform scroll
+                    try {
+                        // Use scrollBy to precisely target the element
+                        scrollEl.scrollBy({ left: dx, top: dy, behavior: 'auto' });
+                    } catch (e) {
+                        // If the chosen element doesn't accept scrollBy, try window fallback
+                        try {
+                            window.scrollBy({ left: dx, top: dy, behavior: 'auto' });
+                            scrollEl = document.scrollingElement || document.documentElement || document.body;
+                        } catch (e2) {
+                            // give up
+                        }
+                    }
+
+                    // Wait briefly for layout / paint
+                    await new Promise((r) => setTimeout(r, 60));
+
+                    // Collect after state
+                    const afterTop = scrollEl.scrollTop;
+                    const afterLeft = scrollEl.scrollLeft;
+                    const scrolledY = Math.abs(afterTop - beforeTop);
+                    const scrolledX = Math.abs(afterLeft - beforeLeft);
+
+                    // Build elementInfo descriptor (safe for JSON)
+                    let elementInfo = null;
+                    try {
+                        elementInfo = {
+                            tag: (scrollEl.tagName || '').toLowerCase(),
+                            id: scrollEl.id || null,
+                            class: scrollEl.className ? String(scrollEl.className) : null
+                        };
+                    } catch (e) {
+                        elementInfo = { tag: 'unknown', id: null, class: null };
+                    }
+
+                    return {
+                        error: null,
+                        elementInfo,
+                        axis,
+                        before: { top: beforeTop, left: beforeLeft },
+                        after: { top: afterTop, left: afterLeft },
+                        scrolled: { y: scrolledY, x: scrolledX },
+                        maxScroll: { y: maxScrollY, x: maxScrollX },
+                        isAtTop: beforeTop === 0 && beforeLeft === 0,
+                        canScrollFurther: {
+                            y: afterTop < maxScrollY,
+                            x: afterLeft < maxScrollX
+                        }
+                    };
+                })();
+            }""",
+            {"x": center_x, "y": center_y, "dx": dx, "dy": dy},
+        )
+
+        # --- Validate JS result ---
+        if not js_result or js_result.get("error"):
+            logger.error(f"Scroll evaluation returned error: {js_result}", browser_context)
+            return ActionResult(error="Could not evaluate or perform scroll on page")
+
+        axis = js_result.get("axis", "y")
+        scrolled_pixels = js_result.get("scrolled", {}).get(axis, 0)
+        max_scroll_axis = js_result.get("maxScroll", {}).get(axis, 0)
+        after_pos = js_result.get("after", {}).get("top" if axis == "y" else "left", 0)
+        before_pos = js_result.get("before", {}).get("top" if axis == "y" else "left", 0)
+        can_scroll_further = js_result.get("canScrollFurther", {}).get(axis, False)
+        element_info = js_result.get("elementInfo")
+
+        # --- Build human-friendly feedback ---
+        # thresholds can be tuned
+        NO_MOVE_THRESHOLD = 8  # pixels - consider this 'no meaningful movement'
+        NEAR_LIMIT_THRESHOLD = 6  # pixels remaining to consider at limit
+
+        if scrolled_pixels <= NO_MOVE_THRESHOLD:
+            # If there was essentially no movement, check whether we're at the limit
+            if (direction == "down" and (max_scroll_axis - after_pos) <= NEAR_LIMIT_THRESHOLD) or \
+               (direction == "up" and after_pos <= NEAR_LIMIT_THRESHOLD) or \
+               (direction == "right" and (max_scroll_axis - after_pos) <= NEAR_LIMIT_THRESHOLD) or \
+               (direction == "left" and after_pos <= NEAR_LIMIT_THRESHOLD):
+                msg = (
+                    f"SCROLL LIMIT REACHED: Attempted to scroll {scroll_area_label} {direction}, "
+                    f"but reached the {('bottom' if direction=='down' else 'top') if axis=='y' else ('right' if direction=='right' else 'left')} of the area. "
+                    f"Element: {element_info}."
+                )
+                logger.debug(msg, browser_context)
+                return ActionResult(message=msg)
             else:
-                logger.debug(
-                    f"Attempted to scroll: {actual_scroll} but only moved: {actual_scroll} pixels",
-                    browser_context,
+                msg = (
+                    f"LIMITED SCROLL: Attempted to scroll {scroll_area_label} {direction} by {int(abs(scroll_pixels))}px, "
+                    f"but the content only moved {int(scrolled_pixels)}px. Element: {element_info}."
                 )
-                return ActionResult(
-                    message=(
-                        f"LIMITED SCROLL: {scroll_area} has restricted scrollability. "
-                        f"Attempted to scroll but only moved {actual_scroll} pixels. "
-                    )
-                )
+                logger.debug(msg, browser_context)
+                return ActionResult(message=msg)
 
-        message = f"Scrolled {scroll_area} by {actual_scroll} pixels {direction}wards."
+        # Successful scroll
+        remaining = 0
+        if direction in ("down", "right"):
+            remaining = max(0, int(max_scroll_axis - after_pos))
+        else:
+            remaining = max(0, int(after_pos))
 
-        if max_remaining > 100:
-            message += f" Approximately {max_remaining} pixels remaining to scroll {direction}."
+        message = (
+            f"SCROLLED: {scroll_area_label} scrolled {int(scrolled_pixels)} px {direction}. "
+            f"Remaining on this axis ≈ {remaining} px. Element: {element_info}."
+        )
 
-        logger.debug(f"{message}", browser_context)
+        logger.debug(message, browser_context)
         return ActionResult(message=message)
 
     except Exception as e:
         logger.error(f"Error scrolling: {e}", browser_context)
-        return ActionResult(error=f"Failed to scroll")
+        return ActionResult(error=f"Failed to scroll: {e}")
 
 
 @tool_registry.register(
@@ -806,7 +811,7 @@ async def scroll(
 )
 async def select_dropdown_option(
     element_index: int,
-    option_index: int,  # TODO: handle multi-select
+    option_index: int,  # TODO: handle multi-select with class Option:
     browser_context: Annotated[BrowserContext | None, InjectedToolArg] = None,
 ) -> ActionResult:
     """
@@ -816,7 +821,9 @@ async def select_dropdown_option(
         element_node = await browser_context.get_dom_element_by_index(element_index)
 
         if not element_node:
-            logger.error(f"Element with index {element_index} not found.", browser_context)
+            logger.error(
+                f"Element with index {element_index} not found.", browser_context
+            )
             return ActionResult(error=f"Element {element_index} not found. Try Again")
 
         asyncio.create_task(
@@ -900,7 +907,9 @@ async def find_by_selector(
         )
 
     except Exception as e:
-        logger.error(f"Failed to execute find_by_selector tool: {str(e)}", browser_context)
+        logger.error(
+            f"Failed to execute find_by_selector tool: {str(e)}", browser_context
+        )
         return ActionResult(
             error=f"An unexpected error occurred while trying to find the element by selector: {str(e)}",
             reserve_tools=["find", "find_by_selector"],
