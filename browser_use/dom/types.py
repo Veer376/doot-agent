@@ -13,15 +13,59 @@ class BoundingBox:
     width: int
     height: int
     highlight_index: int | None = None
+    scroll_x: int = 0
+    scroll_y: int = 0
+    viewport_width: int = 0
+    viewport_height: int = 0
+    device_pixel_ratio: float = 1.0
+    iframe_offset_x: int = 0
+    iframe_offset_y: int = 0
+
+    # Make the object iterable to support unpacking like x, y, width, height = bbox
+    def __iter__(self):
+        """Allow the object to be unpacked like a tuple (x, y, width, height)"""
+        yield self.x
+        yield self.y
+        yield self.width
+        yield self.height
 
     def __init__(
-        self, x: int, y: int, width: int, height: int, highlight_index: int = None
+        self,
+        x: int,
+        y: int,
+        width: int,
+        height: int,
+        highlight_index: int = None,
+        scroll_x: int = 0,
+        scroll_y: int = 0,
+        viewport_width: int = 0,
+        viewport_height: int = 0,
+        device_pixel_ratio: float = 1.0,
+        iframe_offset_x: int = 0,
+        iframe_offset_y: int = 0,
     ):
         self.x = x
         self.y = y
         self.width = width
         self.height = height
         self.highlight_index = highlight_index
+        self.scroll_x = scroll_x
+        self.scroll_y = scroll_y
+        self.viewport_width = viewport_width
+        self.viewport_height = viewport_height
+        self.device_pixel_ratio = device_pixel_ratio
+        self.iframe_offset_x = iframe_offset_x
+        self.iframe_offset_y = iframe_offset_y
+
+    @property
+    def absolute_x(self) -> int:
+        """Get x position with iframe offset applied"""
+        return self.x + self.iframe_offset_x
+
+    @property
+    def absolute_y(self) -> int:
+        """Get y position with iframe offset applied"""
+        return self.y + self.iframe_offset_y
 
     def to_dict(self) -> dict:
         return {
@@ -30,6 +74,13 @@ class BoundingBox:
             "width": self.width,
             "height": self.height,
             "highlight_index": self.highlight_index,
+            "scroll_x": self.scroll_x,
+            "scroll_y": self.scroll_y,
+            "viewport_width": self.viewport_width,
+            "viewport_height": self.viewport_height,
+            "device_pixel_ratio": self.device_pixel_ratio,
+            "iframe_offset_x": self.iframe_offset_x,
+            "iframe_offset_y": self.iframe_offset_y,
         }
 
 
@@ -177,10 +228,10 @@ class DOMElementNode(DOMBaseNode):
 
         collect_text(self, 0)
         return "\n".join(text_parts).strip()
-    
+
     # In your dom/types.py file, add this new method to the DOMElementNode class
 
-# ... (inside the DOMElementNode class) ...
+    # ... (inside the DOMElementNode class) ...
     def get_simplified_dom_text(self) -> str:
         """
         Recursively converts the DOM tree into a simplified, indented text
@@ -189,56 +240,65 @@ class DOMElementNode(DOMBaseNode):
         # These are the attributes we want to show the LLM.
         # We prioritize semantic attributes over styling.
         attrs_to_keep = [
-            'id', 'class', 'role', 'aria-label', 'placeholder', 
-            'alt', 'for', 'name', 'title', 'type', 'href'
+            "id",
+            "class",
+            "role",
+            "aria-label",
+            "placeholder",
+            "alt",
+            "for",
+            "name",
+            "title",
+            "type",
+            "href",
         ]
-        
+
         # A list to hold the lines of the final text output.
         simplified_lines = []
-    
+
         def process_node(node: DOMBaseNode, depth: int) -> None:
             indent = "  " * depth  # Indentation for hierarchy
-    
+
             if isinstance(node, DOMTextNode):
                 # Only include non-empty, visible text nodes.
                 text = node.text.strip()
                 if text and node.is_visible:
                     simplified_lines.append(f'{indent}"{text}"')
                 return
-    
+
             if isinstance(node, DOMElementNode):
                 # --- Build the opening tag with important attributes ---
                 attr_parts = []
-                
+
                 # Add the special clickable element ID if it exists.
                 if node.highlight_index is not None:
                     attr_parts.append(f'id="[{node.highlight_index}]"')
-    
+
                 for attr, value in node.attributes.items():
                     # Ensure value is a string and not empty
                     if attr in attrs_to_keep and isinstance(value, str) and value:
                         # Clean up long class lists for brevity
-                        if attr == 'class' and len(value) > 50:
-                            value = ' '.join(value.split()[:5]) + '...'
+                        if attr == "class" and len(value) > 50:
+                            value = " ".join(value.split()[:5]) + "..."
                         attr_parts.append(f'{attr}="{value}"')
-    
+
                 attr_str = " ".join(attr_parts)
                 simplified_lines.append(f"{indent}<{node.tag_name} {attr_str}>")
-    
+
                 # --- Recursively process all child nodes ---
                 for child in node.children:
                     process_node(child, depth + 1)
-                
+
                 simplified_lines.append(f"{indent}</{node.tag_name}>")
-    
+
         # Start the process from the root node (self).
         process_node(self, 0)
         return "\n".join(simplified_lines)
-    
+
     def get_contextual_dom_text(
         self,
-        ancestor_levels: int = 1, # How many levels to go up
-        sibling_count: int = 0   # How many siblings to include on each side
+        ancestor_levels: int = 1,  # How many levels to go up
+        sibling_count: int = 0,  # How many siblings to include on each side
     ) -> str:
         """
         Creates a rich, contextual, simplified DOM text snippet around a target element.
@@ -269,7 +329,7 @@ class DOMElementNode(DOMBaseNode):
             if ancestor.parent:
                 ancestor = ancestor.parent
             else:
-                break # Stop if we reach the top of the tree
+                break  # Stop if we reach the top of the tree
 
         # 2. Get the parent of the final ancestor to find its siblings
         top_level_parent = ancestor.parent
@@ -284,7 +344,7 @@ class DOMElementNode(DOMBaseNode):
             children=[],
             xpath=top_level_parent.xpath,
             is_visible=top_level_parent.is_visible,
-            parent=None
+            parent=None,
         )
 
         # 4. Find the ancestor's position among its siblings
@@ -308,15 +368,15 @@ class DOMElementNode(DOMBaseNode):
                 stub_sibling = DOMElementNode(
                     tag_name=sibling.tag_name,
                     attributes=sibling.attributes,
-                    children=[], # Don't include children of siblings
+                    children=[],  # Don't include children of siblings
                     xpath=sibling.xpath,
                     is_visible=sibling.is_visible,
-                    parent=snippet_root
+                    parent=snippet_root,
                 )
                 snippet_root.children.append(stub_sibling)
 
         return snippet_root.get_simplified_dom_text()
-   
+
     @time_execution_sync("--clickable_elements_to_string")
     def clickable_elements_to_string(
         self, include_attributes: list[str] | None = None
@@ -452,19 +512,23 @@ class DOMElementNode(DOMBaseNode):
             "placeholder",
             "title",
             "alt",  # Very important for images within links/buttons
-            "name",  # Common for form inputs
+            # "name",  # Common for form inputs
         ]
-        
+        attribute = ""
         for attr in prioritized_attributes:
             if self.attributes.get(attr):
                 # Return the first descriptive attribute found, stripped of whitespace.
-                return self.attributes[attr].strip()
-        
+                attribute = self.attributes[attr].strip()
+                return attribute
+            
         # 3. As a final fallback, if the element is truly empty of descriptive
         #    attributes and text, use its tag name.
-        return self.tag_name
-
-
+        text = self.get_all_text_till_next_clickable_element().strip()
+        
+        if text:
+            text = " ".join(text.split()[:3])
+        
+        return text
 
 SelectorMap = dict[int, DOMElementNode]
 
