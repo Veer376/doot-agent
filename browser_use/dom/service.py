@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from playwright.async_api import Page
 
 from browser_use.dom.types import (
+    BoundingBox,
     DOMBaseNode,
     DOMElementNode,
     DOMState,
@@ -46,7 +47,7 @@ class DomService:
         element_tree, selector_map = await self._build_dom_tree(
             highlight_elements, focus_element, viewport_expansion
         )
-        
+
         return DOMState(element_tree=element_tree, selector_map=selector_map)
 
     @time_execution_async("--get_cross_origin_iframes")
@@ -103,7 +104,7 @@ class DomService:
         #       The returned hash map contains information about the DOM tree and the
         #       relationship between the DOM elements.
         # debug_mode = logger.getEffectiveLevel() == logging.DEBUG
-        debug_mode = False
+        debug_mode = True
         args = {
             "doHighlightElements": highlight_elements,
             "focusHighlightIndex": focus_element,
@@ -188,6 +189,25 @@ class DomService:
             )
             return text_node, []
 
+        # Process the bounding box if it exists
+        bbox = None
+        if node_data.get("bbox"):
+            bbox_data = node_data.get("bbox")
+            bbox = BoundingBox(
+                x=bbox_data.get("x", 0),
+                y=bbox_data.get("y", 0),
+                width=bbox_data.get("width", 0),
+                height=bbox_data.get("height", 0),
+                highlight_index=bbox_data.get("highlight_index"),
+                scroll_x=bbox_data.get("scroll_x", 0),
+                scroll_y=bbox_data.get("scroll_y", 0),
+                viewport_width=bbox_data.get("viewport_width", 0),
+                viewport_height=bbox_data.get("viewport_height", 0),
+                device_pixel_ratio=bbox_data.get("device_pixel_ratio", 1.0),
+                iframe_offset_x=bbox_data.get("iframe_offset_x", 0),
+                iframe_offset_y=bbox_data.get("iframe_offset_y", 0),
+            )
+
         element_node = DOMElementNode(
             tag_name=node_data["tagName"],
             xpath=node_data["xpath"],
@@ -200,7 +220,7 @@ class DomService:
             highlight_index=node_data.get("highlightIndex"),
             shadow_root=node_data.get("shadowRoot", False),
             parent=None,
-            bbox=node_data.get("bbox", None),
+            bbox=bbox,
         )
 
         children_ids = node_data.get("children", [])
