@@ -110,8 +110,8 @@ Based on this assessment, determine the next optimal action, specifying the exac
 
         # Browser State Content
         try:
-            browser_state: BrowserState = (
-                (await agent_context.browser_context.get_state(cache_clickable_elements_hashes=True))
+            browser_state: BrowserState = await agent_context.browser_context.get_state(
+                cache_clickable_elements_hashes=True
             )
         except Exception as e:
             logger.error(f"Error gathering browser state: {e}", exc_info=True)
@@ -136,7 +136,7 @@ Based on this assessment, determine the next optimal action, specifying the exac
             raise ValueError("Browser state content is empty or invalid.")
 
         # Task
-        self.message_blueprint.task = agent_state.task 
+        self.message_blueprint.task = agent_state.task
 
         # Dynamic Messages (if any)
         dynamic_messages = ""
@@ -145,11 +145,10 @@ Based on this assessment, determine the next optimal action, specifying the exac
 
         if active_messages:
             dynamic_messages += "**Heads-Up:**\n" + "\n".join(active_messages)
-        
+
         if dynamic_messages:
             self.message_blueprint.dynamic_messages = dynamic_messages
-            
-    
+
     async def build_message_blueprint(
         self,
         agent_context: "AgentContext",
@@ -164,5 +163,5 @@ Based on this assessment, determine the next optimal action, specifying the exac
 
         tools = await tool_registry.get_active_tools(agent_context, agent_state)
         self.message_blueprint.active_tools = tools
-        
+
         return self.message_blueprint
