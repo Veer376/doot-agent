@@ -8,11 +8,12 @@ from browser_use.context import BrowserContext
 from .registry import tool_registry  # Import from the registry in the same directory
 from .utils import get_extraction_plan
 from readability import Document
-from .types import ActionResult
+from .types import ToolResult
 from logging_utils import BrowserLogger as Logger
 import math
 import asyncio
 from typing import Annotated
+from langgraph.runtime import get_runtime  # NOTE: consider using the get_runtime()
 
 logger = get_toolkit_logger("tools")
 
@@ -23,14 +24,16 @@ async def type_text(
     text: str,
     press_enter: bool,
     browser_context: Annotated[BrowserContext | None, InjectedToolArg] = None,
-) -> ActionResult:
+) -> ToolResult:
     """Types text into a focused text field or search and select the dropdown option, identified by its numbered label."""
 
     element_node = await browser_context.get_dom_element_by_index(element_index)
 
     if not element_node:
         logger.debug(f"Element index {element_index} not found", browser_context)
-        return ActionResult(error=f"Element index {element_index} not found")
+        return ToolResult(
+            message=f"Element index {element_index} not found", status="error"
+        )
 
     try:
         element_description = element_node.get_description()
@@ -44,8 +47,9 @@ async def type_text(
                 f"Element {element_index}({element_description}) is a button",
                 browser_context,
             )
-            return ActionResult(
-                error=f"Element {element_index}({element_description}) is a button and cannot be typed into."
+            return ToolResult(
+                message=f"Element {element_index}({element_description}) is a button and cannot be typed into.",
+                status="error",
             )
 
         dropdown_info = await browser_context.is_element_dropdown(element_node)
@@ -87,7 +91,7 @@ async def type_text(
                     "Please review the current selection against all available options below. "
                     "If you want to select another option, use the dropdown tool. "
                 )
-                return ActionResult(
+                return ToolResult(
                     message=message,
                     data={"selected_options": selected_options, "options": options},
                     reserve_tools=["select_dropdown_option"],
@@ -98,7 +102,7 @@ async def type_text(
                     f"Failed to interact with dropdown element {str(e)}",
                     browser_context,
                 )
-                return ActionResult(
+                return ToolResult(
                     message=f"Element {element_index}({element_description}) is dropdown element. Use the appropriate tool to interact with it."
                 )
 
@@ -112,14 +116,14 @@ async def type_text(
             await page.keyboard.press("Enter")
             message += " and sent it by pressing Enter key"
 
-        return ActionResult(message=message)
+        return ToolResult(message=message)
 
     except Exception as e:
         logger.error(
             f"Failed to type text into element {element_index}: {str(e)}",
             browser_context,
         )
-        return ActionResult(
+        return ToolResult(
             error=f"Failed to type text into element {element_index}({element_node.get_description()})"
         )
 
@@ -131,38 +135,40 @@ async def type_text(
 async def google_search(
     query: str,
     browser_context: Annotated[BrowserContext | None, InjectedToolArg] = None,
-) -> ActionResult:
+) -> ToolResult:
     """Searches on google"""
     try:
         asyncio.create_task(browser_context.animator.processing(f"Searching '{query}'"))
         await browser_context.navigate_to(f"https://www.google.com/search?q={query}")
-        return ActionResult(message=f"Searched the query: {query}")
+        return ToolResult(message=f"Searched the query: {query}")
     except Exception as e:
         logger.error(f"Google search failed: {str(e)}", browser_context)
-        return ActionResult(message=f"Search failed: {str(e)}")
+        return ToolResult(message=f"Search failed: {str(e)}")
 
 
 @tool_registry.register()
 async def goto_url(
     url: str, browser_context: Annotated[BrowserContext | None, InjectedToolArg] = None
-) -> ActionResult:
+) -> ToolResult:
     """Navigates the browser to a specific URL endpoint as a direct web address e.g. www.linkedin.com/jobs"""
     try:
         if not url.startswith("http://") and not url.startswith("https://"):
             url = f"https://{url}"
         await browser_context.navigate_to(url)
-        return ActionResult(message=f"Navigated to {url}")
+        return ToolResult(message=f"Navigated to {url}")
 
     except Exception as e:
         logger.error(f"Failed to navigate to {url}: {str(e)}", browser_context)
-        return ActionResult(error=f"Failed to navigate to {url}. {str(e)}")
+        return ToolResult(
+            message=f"Failed to navigate to {url}. {str(e)}", status="error"
+        )
 
 
 @tool_registry.register()
 async def click_element(
     element_index: int,
     browser_context: Annotated[BrowserContext | None, InjectedToolArg] = None,
-) -> ActionResult:
+) -> ToolResult:
     """Clicks an interactive element, such as a dropdown or button, identified by its numbered label."""
 
     try:
@@ -172,14 +178,16 @@ async def click_element(
             logger.debug(
                 f"Element with index {element_index} not found.", browser_context
             )
-            return ActionResult(error=f"Element index {element_index} not found.")
+            return ToolResult(
+                message=f"Element index {element_index} not found.", status="error"
+            )
 
         session = await browser_context.get_session()
         initial_pages = len(session.context.pages)
 
         # if element has file uploader then dont click
         # if await browser_context.is_file_uploader(element_node):
-        #     return ActionResult(message=f'Index {element_index} - has an element which opens file upload dialog. To upload files please use a specific function to upload files ')
+        #     return ToolResult(message=f'Index {element_index} - has an element which opens file upload dialog. To upload files please use a specific function to upload files ')
 
         try:
             download_path = await browser_context._click_element_node(element_node)
@@ -200,7 +208,7 @@ async def click_element(
             new_tab_msg = "New tab opened"
             message += f" - {new_tab_msg}"
             await browser_context.switch_to_tab(-1)
-            
+
         else:
             try:
                 dropdown_info = await browser_context.is_element_dropdown(element_node)
@@ -216,7 +224,9 @@ async def click_element(
                         )
                     )
 
-                    dropdown_details = await browser_context.get_dropdown_details(element_node)
+                    dropdown_details = await browser_context.get_dropdown_details(
+                        element_node
+                    )
                     message = (
                         f"BE AWARE: Element ({element_node.get_description()}) is also a dropdown. "
                         "If you think the dropdown options are not marked with numbered labels "
@@ -224,24 +234,29 @@ async def click_element(
                     )
                     page = await browser_context.get_agent_current_page()
                     await page.keyboard.press("Escape")
-                    return ActionResult(
+                    return ToolResult(
                         message=message,
                         data={
-                            "selected_options": dropdown_details.get("selected_options", []),
+                            "selected_options": dropdown_details.get(
+                                "selected_options", []
+                            ),
                             "options": dropdown_details.get("options", []),
                         },
                         reserve_tools=["select_dropdown_option"],
                     )
-                    
+
             except Exception as e:
-                logger.error(f"Failed to get dropdown details: {str(e)}", browser_context)
-                
-        return ActionResult(message=message)
+                logger.error(
+                    f"Failed to get dropdown details: {str(e)}", browser_context
+                )
+
+        return ToolResult(message=message)
 
     except Exception as e:
         logger.error(f"Click failed : {str(e)}", browser_context)
-        return ActionResult(
-            error=f"Failed to click element index {element_index}, most likely the state has changed."
+        return ToolResult(
+            message=f"Failed to click element index {element_index}, most likely the state has changed.",
+            status="error",
         )
 
 
@@ -249,11 +264,11 @@ async def click_element(
 async def wait(
     seconds: int,
     browser_context: Annotated[BrowserContext | None, InjectedToolArg] = None,
-) -> ActionResult:
+) -> ToolResult:
     """Pauses execution. Use it to wait for content loading and user required actions or interactions."""
     logger.info(f"Waiting for {seconds} seconds...", browser_context)
     await asyncio.sleep(seconds)
-    return ActionResult(message=f"Waited for {seconds} seconds")
+    return ToolResult(message=f"Waited for {seconds} seconds")
 
 
 @tool_registry.register(
@@ -264,7 +279,7 @@ async def find(
     role: str,
     tag: str,
     browser_context: Annotated[BrowserContext | None, InjectedToolArg] = None,
-) -> ActionResult:
+) -> ToolResult:
     """Finds and scrolls to a specific element or text on the page. Provide semantic attributes like text(name), role, and tag for the most precise search."""
 
     try:
@@ -303,7 +318,7 @@ async def find(
             await element.evaluate("el => el.scrollIntoView({block: 'start'})")
             await page.wait_for_load_state("domcontentloaded", timeout=5000)
             logger.info(f"Found and scrolled to element: '{text}'", browser_context)
-            return ActionResult(
+            return ToolResult(
                 message=f"Successfully found and scrolled to element: '{text}'"
             )
 
@@ -322,7 +337,7 @@ async def find(
             await page.wait_for_load_state("domcontentloaded", timeout=5000)
 
             logger.info(f"Found and scrolled to element: '{text}'", browser_context)
-            return ActionResult(message=f"Found and scrolled to element: '{text}'")
+            return ToolResult(message=f"Found and scrolled to element: '{text}'")
 
         elements = []
         for i in range(count):
@@ -347,7 +362,7 @@ async def find(
 
         logger.info(f"Found multiple elements matching '{text}'", browser_context)
 
-        return ActionResult(
+        return ToolResult(
             message=f"Found multiple ({len(elements)}) elements matching '{text}'. Review the list and use the `find_by_selector` tool with the appropriate selector to proceed.",
             data=elements,
             reserve_tools=["find_by_selector"],
@@ -355,7 +370,7 @@ async def find(
 
     except Exception as e:
         logger.error(f"Failed to execute find tool: {str(e)}", browser_context)
-        return ActionResult(
+        return ToolResult(
             error=f"An unexpected error occurred while trying to find the element: {str(e)}"
         )
 
@@ -365,7 +380,7 @@ async def extract(
     query: str,
     element_index: int | None = None,
     browser_context: Annotated[BrowserContext | None, InjectedToolArg] = None,
-) -> ActionResult:
+) -> ToolResult:
     """Extracts content of the viewport or complete page when a manual reading is complex. Use it to get the full text of an article, extract structured data like tables, lists, images etc.
     element_index: Use to extract a single item directly, or provide as an example to extract a list of similar items (if available in browser state)
     """
@@ -397,8 +412,9 @@ async def extract(
                     f"Element with index {element_index} not found for extraction",
                     browser_context,
                 )
-                return ActionResult(
-                    error=f"Element with index {element_index} not found."
+                return ToolResult(
+                    message=f"Element with index {element_index} not found.",
+                    status="error",
                 )
 
             contextual_snippet = element.get_contextual_dom_text()
@@ -450,14 +466,15 @@ async def extract(
                     f"Extracted main content for article, length: {len(main_content_html)}",
                     browser_context,
                 )
-                return ActionResult(
+                return ToolResult(
                     message=f"Extracted main content for article: '{doc.title()}'",
                     data=main_content_html,
                 )
 
             if not selector:
-                return ActionResult(
-                    error=f"The extraction strategist failed to provide a selector for the goal '{goal}'."
+                return ToolResult(
+                    message=f"The extraction strategist failed to provide a selector for the goal '{goal}'.",
+                    status="error",
                 )
 
             elements = page.locator(selector)
@@ -466,7 +483,7 @@ async def extract(
                 logger.warning(
                     f"No elements found for selector: {selector}", browser_context
                 )
-                return ActionResult(
+                return ToolResult(
                     message=f"The generated selector '{selector}' did not find any elements."
                 )
 
@@ -478,7 +495,7 @@ async def extract(
                 logger.debug(
                     f"Extracted text for query: '{query[:50]}...'", browser_context
                 )
-                return ActionResult(
+                return ToolResult(
                     message=f"Extracted text for query: '{query}'", data=data
                 )
 
@@ -491,29 +508,32 @@ async def extract(
                     f"Extracted {len(data)} items for query: '{query}', Data: \n{data[:10]}...",
                     browser_context,
                 )  # logger first 10 items for debugging
-                return ActionResult(
+                return ToolResult(
                     message=f"Extracted {len(data)} items for query: '{query}'",
                     data=data,
                 )
 
             # elif goal == "TABLE":
             #     table_data = await _extract_table_data(elements.first)
-            #     return ActionResult(message=f"Extracted table with {len(table_data)} rows.", data=table_data)
+            #     return ToolResult(message=f"Extracted table with {len(table_data)} rows.", data=table_data)
 
             else:
-                return ActionResult(
-                    error=f"Unknown goal '{goal}' returned by strategist."
+                return ToolResult(
+                    message=f"Unknown goal '{goal}' returned by strategist.",
+                    status="error",
                 )
         except Exception as e:
             logger.error(f"Failed to execute extract tool: {str(e)}", browser_context)
-            return ActionResult(
-                error=f"An unexpected error occurred during extraction: {str(e)}"
+            return ToolResult(
+                message=f"An unexpected error occurred during extraction: {str(e)}",
+                status="error",
             )
 
     except Exception as e:
         logger.error(f"Failed to execute extract tool: {str(e)}", browser_context)
-        return ActionResult(
-            error=f"An unexpected error occurred during extraction: {str(e)}"
+        return ToolResult(
+            message=f"An unexpected error occurred during extraction: {str(e)}",
+            status="error",
         )
 
 
@@ -522,13 +542,14 @@ async def finish_task(
     is_task_completed: bool,
     reason: str,
     browser_context: Annotated[BrowserContext | None, InjectedToolArg] = None,
-) -> ActionResult:
+) -> ToolResult:
     """Finishes the running task. Provide a reason that why you can't complete the task."""
     logger.info(
         f"Task {'Completed' if is_task_completed else 'Failed'}, reason: {reason}",
         browser_context,
     )
-    return ActionResult(
+    # NOTE: use command to directly move to the task summarizer.
+    return ToolResult(
         message=f"Task {'Completed' if is_task_completed else 'Failed'} because {reason}"
     )
 
@@ -536,16 +557,18 @@ async def finish_task(
 @tool_registry.register(is_active=lambda ctx: ctx.text_field_focused)
 async def press_keys(
     keys: str, browser_context: Annotated[BrowserContext | None, InjectedToolArg] = None
-) -> ActionResult:
+) -> ToolResult:
     """Simulates key press or keyboard shortcuts. e.g. 'Enter', 'Control+A' etc."""
     try:
         asyncio.create_task(browser_context.animator.key(keys))
         page = await browser_context.get_agent_current_page()
         await page.keyboard.press(keys)
-        return ActionResult(message=f"Pressed keys: {keys}")
+        return ToolResult(message=f"Pressed keys: {keys}")
     except Exception as e:
         logger.error(f"Failed to press keys '{keys}': {str(e)}", browser_context)
-        return ActionResult(error=f"Failed to press keys '{keys}': {str(e)}")
+        return ToolResult(
+            message=f"Failed to press keys '{keys}': {str(e)}", status="error"
+        )
 
 
 @tool_registry.register()
@@ -555,7 +578,7 @@ async def scroll(
     direction: str,
     scroll_area_label: str,
     browser_context: Annotated[BrowserContext | None, InjectedToolArg] = None,
-) -> ActionResult:
+) -> ToolResult:
     """
     Scrolls within a specific area defined by a bounding box.
     Use for scrollable non-labeled areas/sections of the page.
@@ -568,13 +591,16 @@ async def scroll(
     try:
         # --- Basic sanity checks & get page ---
         page = await browser_context.get_agent_current_page()
-        
+
         if not page:
-            return ActionResult(error="No active page found")
-        
+            return ToolResult(message="No active page found", status="error")
+
         direction = (direction or "").lower()
         if direction not in ("up", "down", "left", "right"):
-            return ActionResult(error="direction must be one of 'up', 'down', 'left', 'right'")
+            return ToolResult(
+                message="direction must be one of 'up', 'down', 'left', 'right'",
+                status="error",
+            )
 
         ymin, xmin, ymax, xmax = bounding_box
 
@@ -584,13 +610,22 @@ async def scroll(
             width = viewport.get("width")
             height = viewport.get("height")
         else:
-            viewport = await page.evaluate("() => ({ width: window.innerWidth, height: window.innerHeight })")
+            viewport = await page.evaluate(
+                "() => ({ width: window.innerWidth, height: window.innerHeight })"
+            )
             width = viewport.get("width")
             height = viewport.get("height")
 
-        if not (isinstance(width, (int, float)) and isinstance(height, (int, float)) and width > 0 and height > 0):
+        if not (
+            isinstance(width, (int, float))
+            and isinstance(height, (int, float))
+            and width > 0
+            and height > 0
+        ):
             logger.error("Could not determine viewport size", browser_context)
-            return ActionResult(error="Could not determine viewport size")
+            return ToolResult(
+                message="Could not determine viewport size", status="error"
+            )
 
         # --- Compute central point in page viewport coordinates ---
         try:
@@ -598,16 +633,29 @@ async def scroll(
             center_y = ((ymin + ymax) / 2.0) / 1000.0 * height
         except Exception as e:
             logger.error(f"Error calculating coordinates: {e}", browser_context)
-            return ActionResult(error=f"Error calculating scroll coordinates: {e}")
+            return ToolResult(
+                message=f"Error calculating scroll coordinates: {e}", status="error"
+            )
 
         # Validate finite & inside viewport
         if not (math.isfinite(center_x) and math.isfinite(center_y)):
-            logger.error(f"Invalid coordinates calculated: x={center_x}, y={center_y}", browser_context)
-            return ActionResult(error="Invalid scroll coordinates (not finite)")
+            logger.error(
+                f"Invalid coordinates calculated: x={center_x}, y={center_y}",
+                browser_context,
+            )
+            return ToolResult(
+                message="Invalid scroll coordinates (not finite)", status="error"
+            )
 
         if not (0 <= center_x < width and 0 <= center_y < height):
-            logger.error(f"Coordinates out of viewport: x={center_x}, y={center_y}, width={width}, height={height}", browser_context)
-            return ActionResult(error="Computed scroll coordinates are outside the viewport")
+            logger.error(
+                f"Coordinates out of viewport: x={center_x}, y={center_y}, width={width}, height={height}",
+                browser_context,
+            )
+            return ToolResult(
+                message="Computed scroll coordinates are outside the viewport",
+                status="error",
+            )
 
         # --- Prepare scroll deltas ---
         dx = 0
@@ -626,7 +674,7 @@ async def scroll(
                 browser_context.animator.scroll(
                     direction,
                     coords={"x": center_x, "y": center_y},
-                    text=f"Scroll: {scroll_area_label}"
+                    text=f"Scroll: {scroll_area_label}",
                 )
             )
         except Exception:
@@ -749,14 +797,20 @@ async def scroll(
 
         # --- Validate JS result ---
         if not js_result or js_result.get("error"):
-            logger.error(f"Scroll evaluation returned error: {js_result}", browser_context)
-            return ActionResult(error="Could not evaluate or perform scroll on page")
+            logger.error(
+                f"Scroll evaluation returned error: {js_result}", browser_context
+            )
+            return ToolResult(
+                message="Could not evaluate or perform scroll on page", status="error"
+            )
 
         axis = js_result.get("axis", "y")
         scrolled_pixels = js_result.get("scrolled", {}).get(axis, 0)
         max_scroll_axis = js_result.get("maxScroll", {}).get(axis, 0)
         after_pos = js_result.get("after", {}).get("top" if axis == "y" else "left", 0)
-        before_pos = js_result.get("before", {}).get("top" if axis == "y" else "left", 0)
+        before_pos = js_result.get("before", {}).get(
+            "top" if axis == "y" else "left", 0
+        )
         can_scroll_further = js_result.get("canScrollFurther", {}).get(axis, False)
         element_info = js_result.get("elementInfo")
 
@@ -767,24 +821,32 @@ async def scroll(
 
         if scrolled_pixels <= NO_MOVE_THRESHOLD:
             # If there was essentially no movement, check whether we're at the limit
-            if (direction == "down" and (max_scroll_axis - after_pos) <= NEAR_LIMIT_THRESHOLD) or \
-               (direction == "up" and after_pos <= NEAR_LIMIT_THRESHOLD) or \
-               (direction == "right" and (max_scroll_axis - after_pos) <= NEAR_LIMIT_THRESHOLD) or \
-               (direction == "left" and after_pos <= NEAR_LIMIT_THRESHOLD):
+            if (
+                (
+                    direction == "down"
+                    and (max_scroll_axis - after_pos) <= NEAR_LIMIT_THRESHOLD
+                )
+                or (direction == "up" and after_pos <= NEAR_LIMIT_THRESHOLD)
+                or (
+                    direction == "right"
+                    and (max_scroll_axis - after_pos) <= NEAR_LIMIT_THRESHOLD
+                )
+                or (direction == "left" and after_pos <= NEAR_LIMIT_THRESHOLD)
+            ):
                 msg = (
                     f"SCROLL LIMIT REACHED: Attempted to scroll {scroll_area_label} {direction}, "
                     f"but reached the {('bottom' if direction=='down' else 'top') if axis=='y' else ('right' if direction=='right' else 'left')} of the area. "
                     f"Element: {element_info}."
                 )
                 logger.debug(msg, browser_context)
-                return ActionResult(message=msg)
+                return ToolResult(message=msg)
             else:
                 msg = (
                     f"LIMITED SCROLL: Attempted to scroll {scroll_area_label} {direction} by {int(abs(scroll_pixels))}px, "
                     f"but the content only moved {int(scrolled_pixels)}px. Element: {element_info}."
                 )
                 logger.debug(msg, browser_context)
-                return ActionResult(message=msg)
+                return ToolResult(message=msg)
 
         # Successful scroll
         remaining = 0
@@ -799,11 +861,11 @@ async def scroll(
         )
 
         logger.debug(message, browser_context)
-        return ActionResult(message=message)
+        return ToolResult(message=message)
 
     except Exception as e:
         logger.error(f"Error scrolling: {e}", browser_context)
-        return ActionResult(error=f"Failed to scroll: {e}")
+        return ToolResult(message=f"Failed to scroll: {e}", status="error")
 
 
 @tool_registry.register(
@@ -813,7 +875,7 @@ async def select_dropdown_option(
     element_index: int,
     option_index: int,  # TODO: handle multi-select with class Option:
     browser_context: Annotated[BrowserContext | None, InjectedToolArg] = None,
-) -> ActionResult:
+) -> ToolResult:
     """
     Selects an option from a dropdown by its index.
     """
@@ -824,7 +886,9 @@ async def select_dropdown_option(
             logger.error(
                 f"Element with index {element_index} not found.", browser_context
             )
-            return ActionResult(error=f"Element {element_index} not found. Try Again")
+            return ToolResult(
+                message=f"Element {element_index} not found. Try Again", status="error"
+            )
 
         asyncio.create_task(
             browser_context.animator.dropdown(
@@ -839,8 +903,9 @@ async def select_dropdown_option(
                 f"Element {element_index} ({element_node.get_description()}) is not a dropdown.",
                 browser_context,
             )
-            return ActionResult(
-                error=f"Element {element_index} ({element_node.get_description()}) is not a dropdown."
+            return ToolResult(
+                message=f"Element {element_index} ({element_node.get_description()}) is not a dropdown.",
+                status="error",
             )
 
         # Get dropdown details to include in the response
@@ -859,7 +924,7 @@ async def select_dropdown_option(
                 f"Selected option: {option_text} from dropdown element {element_index}({element_node.get_description()})",
                 browser_context,
             )
-            return ActionResult(
+            return ToolResult(
                 message=f"Successfully selected '{option_text}' from dropdown element {element_index}.",
                 data={
                     "selected_option": selected_option,
@@ -871,18 +936,20 @@ async def select_dropdown_option(
             logger.error(
                 f"Error selecting dropdown option: {error_message}", browser_context
             )
-            return ActionResult(error=f"{error_message}")
+            return ToolResult(message=f"{error_message}", status="error")
 
     except Exception as e:
         logger.error(f"Error selecting dropdown option: {str(e)}", browser_context)
-        return ActionResult(error=f"Error selecting dropdown option: {str(e)}")
+        return ToolResult(
+            message=f"Error selecting dropdown option: {str(e)}", status="error"
+        )
 
 
 @tool_registry.register(is_active=lambda ctx: "find_by_selector" in ctx.reserved_tools)
 async def find_by_selector(
     selector: str,
     browser_context: Annotated[BrowserContext | None, InjectedToolArg] = None,
-) -> ActionResult:
+) -> ToolResult:
     """Finds a single element using a unique CSS selector and scrolls it into view."""
     try:
         asyncio.create_task(
@@ -895,14 +962,16 @@ async def find_by_selector(
         count = await element.count()
 
         if count == 0:
-            return ActionResult(error=f"No element found for selector: {selector}")
+            return ToolResult(
+                message=f"No element found for selector: {selector}", status="error"
+            )
 
         await element.evaluate("el => el.scrollIntoView({block: 'start'})")
         await page.wait_for_load_state("domcontentloaded", timeout=5000)
 
         text = await element.inner_text()
 
-        return ActionResult(
+        return ToolResult(
             message=f"Successfully found and scrolled to element with text: '{text[:100]}'"
         )
 
@@ -910,7 +979,8 @@ async def find_by_selector(
         logger.error(
             f"Failed to execute find_by_selector tool: {str(e)}", browser_context
         )
-        return ActionResult(
-            error=f"An unexpected error occurred while trying to find the element by selector: {str(e)}",
+        return ToolResult(
+            message=f"An unexpected error occurred while trying to find the element by selector: {str(e)}",
+            status="error",
             reserve_tools=["find", "find_by_selector"],
         )
