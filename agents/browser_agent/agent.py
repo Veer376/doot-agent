@@ -27,13 +27,15 @@ logger = get_agent_logger()
 async def _browser_executor(agent_state: AgentState, runtime: Runtime[AgentContext]):
     """Supervisor node which gathers context and calls the LLM."""
     
+    context = runtime.context
+    
     msg_blueprint: MessageBlueprint = await MessageBuilder().build_message_blueprint(
-        runtime.context, agent_state
+        context, agent_state
     )
 
-    llm: LLM = LangChainLLM() if runtime.context.llm == "langchain" else GeminiLLM()
+    llm: LLM = LangChainLLM() if context.llm == "langchain" else GeminiLLM()
 
-    response = await llm(msg_blueprint, config=LLMConfig(thinking_budget=5000))
+    response = await llm(msg_blueprint, context.llm_config)
 
     return {
         "messages": [response], 

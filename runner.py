@@ -9,6 +9,8 @@ import logging
 from agents.llm.usage_stats import get_usage_stats
 import asyncio
 from logging_config import setup_logging
+from agents.llm import LLMConfig
+
 
 setup_logging()
 logger = logging.getLogger("browser_agent.runner")
@@ -23,12 +25,14 @@ async def main():
         agent_context = AgentContext(
             thread_id=1,
             browser_context=browser_context,
+            llm="gemini",
+            llm_config=LLMConfig(thinking_budget=-1)
         )
         agent_state = AgentState(
             messages=[],
             task="Go to whatsapp and send message to abhishek",
             step=0,
-            consecutive_failures=0,
+            consecutive_failures=[],
             last_actions=[],
             reserved_tools=[]
         )

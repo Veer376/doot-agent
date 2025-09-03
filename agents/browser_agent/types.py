@@ -12,7 +12,7 @@ from langchain_core.messages import (
     SystemMessage,
     HumanMessage,
 )
-from ..llm import MessageBlueprintBase, GeminiMessage
+from ..llm import MessageBlueprintBase, GeminiMessage, LLMConfig
 from .utils import error_handler
 
 # FIXME: change to BaseModel for consistency.
@@ -30,6 +30,7 @@ class AgentContext:
     browser_context: BrowserContext
     max_consecutive_failures: int = 2
     llm: Literal["gemini", "langchain"] = "gemini"
+    llm_config: LLMConfig | None = None
 
 
 class MessageBlueprint(MessageBlueprintBase, BaseModel):
