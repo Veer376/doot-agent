@@ -4,8 +4,8 @@ import json
 import anyio
 import pytest
 
-from browser_use.browser.browser import Browser, BrowserConfig
-from browser_use.dom.views import DOMBaseNode, DOMElementNode, DOMTextNode
+from browser_use.browser import Browser, BrowserConfig
+from browser_use.dom.types import DOMBaseNode, DOMElementNode, DOMTextNode
 from browser_use.utils import time_execution_sync
 
 
