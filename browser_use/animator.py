@@ -634,17 +634,19 @@ class Animator:
                 const parts = text.split(jsonRegex);
 
                 parts.forEach(part => {
-                    if (part.trim().startsWith('{') || part.trim().startsWith('[')) {
+                    if (part && (part.trim().startsWith('{') || part.trim().startsWith('['))) {
                         try {
-                            const jsonObj = JSON.parse(part);
+                            // Attempt to fix common Python dict string issues before parsing
+                            const correctedPart = part.replace(/'/g, '"');
+                            const jsonObj = JSON.parse(correctedPart);
                             const pre = document.createElement('pre');
                             pre.textContent = JSON.stringify(jsonObj, null, 2);
                             textContent.appendChild(pre);
                         } catch (e) {
-                            // If parsing fails, treat it as plain text
+                            // If parsing still fails, treat it as plain text
                             textContent.appendChild(document.createTextNode(part));
                         }
-                    } else {
+                    } else if (part) {
                         textContent.appendChild(document.createTextNode(part));
                     }
                 });

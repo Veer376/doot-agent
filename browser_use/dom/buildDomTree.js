@@ -333,7 +333,7 @@
       label.style.fontFamily = "'Arial', 'Segoe UI', sans-serif"; // More readable sans-serif font
       label.style.fontSize = "12.5px"; // Slightly larger font size
       label.style.fontWeight = "normal"; // Normal font weight
-      label.style.padding = "0.4px 1.5px 0px 1.2px"; // More padding for better visibility
+      label.style.padding = "0.5px 1.5px 0.5px 1.5px"; // More padding for better visibility
       label.style.pointerEvents = "none";
       label.style.boxSizing = "border-box";
       label.style.borderBottomRightRadius = "4px";
