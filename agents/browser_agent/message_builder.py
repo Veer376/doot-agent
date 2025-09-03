@@ -78,7 +78,7 @@ Based on this assessment, determine the next optimal action, specifying the exac
     def build_ai_and_tool_messages(self, agent_state: "AgentState"):
         """Build the AI and tool messages."""
 
-        messages = agent_state.get("messages", [])
+        messages = agent_state.messages
 
         ai_message_index = next(
             (
@@ -136,9 +136,7 @@ Based on this assessment, determine the next optimal action, specifying the exac
             raise ValueError("Browser state content is empty or invalid.")
 
         # Task
-        self.message_blueprint.task = agent_state.get(
-            "task", "No task provided. Exit immediately."
-        )
+        self.message_blueprint.task = agent_state.task 
 
         # Dynamic Messages (if any)
         dynamic_messages = ""

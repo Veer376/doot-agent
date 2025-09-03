@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from langgraph.graph.message import add_messages
 from typing import TypedDict, Annotated, Literal, Callable
 from browser_use.context import BrowserContext
@@ -15,14 +15,14 @@ from langchain_core.messages import (
 from ..llm import MessageBlueprintBase, GeminiMessage, LLMConfig
 from .utils import error_handler
 
-# FIXME: change to BaseModel for consistency.
-class AgentState(TypedDict):
+@dataclass
+class AgentState:
     messages: Annotated[list[BaseMessage], add_messages]
     task: str
-    step: int
-    consecutive_failures: list[str]
-    last_actions: list[str]
-    reserved_tools: list[str]
+    step: int = 0
+    consecutive_failures: list[str] = field(default_factory=list)
+    last_actions: list[str] = field(default_factory=list)
+    reserved_tools: list[str] = field(default_factory=list)
 
 @dataclass
 class AgentContext:

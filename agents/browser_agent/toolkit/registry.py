@@ -75,10 +75,10 @@ class ToolRegistry:
 
         context = FilterContext(
             domain=domain,
-            step=agent_state.get("step"),
-            last_action=agent_state.get("last_action"),
+            step=agent_state.step,
+            last_action=agent_state.last_actions[-1] if agent_state.last_actions else None,
             text_field_focused=text_field_focused,
-            reserved_tools=agent_state.get("reserved_tools", [])
+            reserved_tools=agent_state.reserved_tools
         )
 
         active_tools = []

@@ -39,7 +39,7 @@ async def _browser_executor(agent_state: AgentState, runtime: Runtime[AgentConte
 
     return {
         "messages": [response], 
-        "step": agent_state["step"] + 1
+        "step": agent_state.step + 1
     }
 
 
@@ -48,15 +48,17 @@ async def _tool_executor(agent_state: AgentState, runtime: Runtime[AgentContext]
     """Custom tool node that handles tool execution."""
 
     logger = get_agent_logger("tool_executor")
-
+    
+    context: AgentContext = runtime.context
+    
     tool_calls = (
-        getattr(agent_state["messages"][-1], "tool_calls", [])
-        if len(agent_state["messages"]) > 0
+        getattr(agent_state.messages[-1], "tool_calls", [])
+        if len(agent_state.messages) > 0
         else []
     )
 
     if not tool_calls:
-        logger.warning("No tool calls found", runtime.context.browser_context)
+        logger.warning("No tool calls found", context.browser_context)
         raise ToolCallMissing()
 
     tool_results = []
@@ -70,18 +72,18 @@ async def _tool_executor(agent_state: AgentState, runtime: Runtime[AgentContext]
 
         logger.debug(
             f"Executing tool: {tool_name} with args: {tool_call['args']}",
-            runtime.context.browser_context,
+            context.browser_context,
         )
 
         try:
             result: ToolResult | Command = await tool(
-                **tool_call["args"], browser_context=runtime.context.browser_context
+                **tool_call["args"], browser_context=context.browser_context
             )
 
         except ValueError as e:
             logger.error(
                 f"Error occurred while calling tool '{tool_name}': {e}",
-                runtime.context.browser_context,
+                context.browser_context,
             )
             raise InvalidToolCall()
 
@@ -89,9 +91,9 @@ async def _tool_executor(agent_state: AgentState, runtime: Runtime[AgentContext]
             continue
 
         if result.status == "error":
-            agent_state["consecutive_failures"].append(result.message)
+            agent_state.consecutive_failures.append(result.message)
         else:
-            agent_state["consecutive_failures"].clear()
+            agent_state.consecutive_failures.clear()
 
         reserved_tools.extend(getattr(result, "reserve_tools", []) or [])
 
@@ -126,8 +128,8 @@ async def _task_summarizer(state: AgentState):
     )
 
     content = [
-        {"type": "text", "text": f"Last messages: {state['messages'][-3:]}"},
-        {"type": "text", "text": f"Task: {state['task']}"},
+        {"type": "text", "text": f"Last messages: {state.messages[-3:]}"},
+        {"type": "text", "text": f"Task: {state.task}"},
     ]
     
     llm = LangChainLLM()
@@ -139,7 +141,7 @@ async def _task_summarizer(state: AgentState):
 def _route_condition(state: AgentState) -> Literal["continue", "conclude", "end"]:
     logger = get_agent_logger("router")
 
-    messages = state.get("messages", None)
+    messages = state.messages
     last_message = messages[-1] if messages else None
 
     if (

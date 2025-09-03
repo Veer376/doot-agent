@@ -23,7 +23,7 @@ class MessageRegistry:
     def get_active_messages(self, agent_state: "AgentState") -> list[str]:
         """Get all messages that should be active based on the current agent state."""
         context = Context(
-            consecutive_failures=agent_state.get("consecutive_failures", []) or [],
+            consecutive_failures=agent_state.consecutive_failures,
             max_consecutive_failures=2,
         )
         active_messages = [message for message, is_active in self.messages if is_active(context)]
