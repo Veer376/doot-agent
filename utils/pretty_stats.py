@@ -111,7 +111,7 @@ def format_llm_stats(stats: Dict[str, Any]) -> str:
     return "\n".join(result)
 
 
-def print_llm_stats(stats: Dict[str, Any]) -> None:
+def pretty_stats(stats: Dict[str, Any]) -> None:
     """
     Print LLM usage statistics in a beautiful format.
 
@@ -123,14 +123,14 @@ def print_llm_stats(stats: Dict[str, Any]) -> None:
     print("=" * 60 + "\n")
 
 
-def __test() -> None:
+if __name__=="__main__":
     """
     Test function to demonstrate the pretty print utility.
 
     Args:
         stats: Dictionary containing LLM usage statistics
     """
-    print_llm_stats(
+    pretty_stats(
         stats={
             "calls_by_model": {"gpt-3.5-turbo": 150, "gpt-4": 75},
             "input_tokens": {"gpt-3.5-turbo": 5000, "gpt-4": 3000},

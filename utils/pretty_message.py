@@ -142,3 +142,15 @@ def pretty_message(message: Any, console: Console = None):
 
     console.print(panel_to_print)
 
+
+if __name__ == "__main__":
+    """Test function to demonstrate the pretty print utility."""
+
+    ai_message = AIMessage(content="Hello, how can I assist you today?")
+    pretty_message(ai_message)
+
+    human_message = HumanMessage(content="I need help with my order.")
+    pretty_message(human_message)
+
+    tool_message = ToolMessage(tool_call_id="tool_1", content={"message": "Tool executed successfully."})
+    pretty_message(tool_message)
