@@ -1,43 +1,28 @@
 import os
-from dotenv import load_dotenv
-from langchain.chat_models import init_chat_model
-from enum import Enum
-from langchain_core.tools import BaseTool, StructuredTool, Tool
 import logging
-from typing import Any, Callable, Dict, Literal, Optional, Type
-from langchain_core.tools import tool
-from langchain_core.messages import (
-    AIMessage,
-    HumanMessage,
-    ToolMessage,
-)
 from PIL import Image, ImageDraw, ImageFont
 from logging_utils import get_agent_logger
 from .messages.error_messages import MessageException
 from PIL import Image
-from rich.console import Console
-from rich.panel import Panel
-from rich.text import Text
-from rich.markdown import Markdown
-from langchain_core.messages import AIMessage, ToolMessage, HumanMessage
-
-from rich.console import Console
-from rich.panel import Panel
-from rich.text import Text
-from rich.padding import Padding
-from rich.console import Group
-from typing import Any
 import functools
 import logging
 import traceback
 import asyncio
-from rich.syntax import Syntax
-from rich import box
-from rich.markdown import Markdown
 import base64
 
-console = Console()
 logger = logging.getLogger(__name__)
+
+
+def error_handler(func):
+    log = logging.getLogger(func.__qualname__)
+
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            log.error(f"Error: {e}")
+            raise
+    return wrapper
 
 
 def save_to_file(path: str, filename: str, content: bytes | str, index: int = None):
@@ -98,7 +83,7 @@ def escalate_error(func):
         return wrapper
 
 
-def compress(self, image: str, quality: int = 10, convert_to_bw: bool = False) -> str:
+def compress(image: str, quality: int = 10, convert_to_bw: bool = False) -> str:
     """
     Compress a base64-encoded image and optionally convert it to black-and-white.
     Args:
@@ -156,7 +141,7 @@ class BBoxRenderer:
         label_padding_x: int = 1,
         label_padding_y: int = 1,
         font_size: int = 20,
-        font_family: Optional[str] = None,
+        font_family: str | None = None,
     ):
         """
         Initialize the ScreenshotHighlighter with customizable styling options.

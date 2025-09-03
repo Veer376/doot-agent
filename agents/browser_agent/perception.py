@@ -4,12 +4,11 @@ from typing import TYPE_CHECKING
 import json
 from enum import Enum
 from abc import ABC, abstractmethod
-from .utils import compress_image, save_to_file, render_bboxes_on_screenshot
 import base64
 from browser_use.dom.types import DOMElementNode
 import logging
 from logging_utils import get_message_builder_logger
-
+from .utils import BBoxRenderer, save_to_file
 
 if TYPE_CHECKING:
     from browser_use.types import BrowserState
@@ -64,8 +63,42 @@ class Screenshot(BrowserRepresentation):
 
         return instruct1
 
-    def _dom_text(self, state: "BrowserState") -> str:
-        return ""
+    def _get_dom_text(self, state: "BrowserState") -> str:
+
+        # 1. Generate a detailed DOM representation
+        elements_text = state.element_tree.clickable_elements_to_string(
+            include_attributes=[
+                "title",
+                "type",
+                "name",
+                "role",
+                "tabindex",
+                "aria-label",
+                "placeholder",
+                "value",
+                "alt",
+                "aria-expanded",
+            ]
+        )
+
+        # --- 2. Add context about scrolling ---
+        has_content_above = (state.pixels_above or 0) > 0
+        has_content_below = (state.pixels_below or 0) > 0
+
+        if elements_text:
+            if has_content_above:
+                elements_text = f"... {state.pixels_above} pixels above - scroll or extract content to see more ...\n{elements_text}"
+            else:
+                elements_text = f"[Start of page]\n{elements_text}"
+
+            if has_content_below:
+                elements_text = f"{elements_text}\n... {state.pixels_below} pixels below - scroll or extract content to see more ..."
+            else:
+                elements_text = f"{elements_text}\n[End of page]"
+        else:
+            elements_text = ""
+
+        return elements_text
 
     def get_state_content(
         self, browser_state: "BrowserState", agent_state: "AgentState"
@@ -78,19 +111,24 @@ class Screenshot(BrowserRepresentation):
         base64_screenshot = browser_state.screenshot
 
         state_text = f"Browser: {browser_state.title}\n URL: {browser_state.url}\n"
+        if len(browser_state.selector_map) == 0:
+            state_text += "[No interactive elements found, looks like the page is loading.]"
 
+        bbox_renderer = BBoxRenderer()
+        bboxes_screenshot = bbox_renderer.render_bboxes(base64_screenshot, browser_state.selector_map)
+        # bboxes_screenshot = browser_state.screenshot
         try:
             step = agent_state.get("step")
             save_to_file(
-                "agents/browser_executor/screenshots",
+                "screenshots",
                 f"screenshot.png",
-                base64.b64decode(base64_screenshot),
+                base64.b64decode(bboxes_screenshot),
                 index=step,
             )
             save_to_file(
-                "agents/browser_executor/dom",
+                "doms",
                 f"dom.txt",
-                state_text,
+                self._get_dom_text(browser_state),
                 index=step,
             )
 
@@ -100,7 +138,7 @@ class Screenshot(BrowserRepresentation):
             )
             raise
 
-        return {"text": state_text, "image": base64_screenshot}
+        return {"text": state_text, "image": bboxes_screenshot}
 
 
 class MinimalDomTextScreenshot(Screenshot):
@@ -149,43 +187,7 @@ class MarkdownDOM(BrowserRepresentation):
         )
         return instructions
 
-    def _dom_text(self, state: "BrowserState") -> str:
-
-        # 1. Generate a detailed DOM representation
-        elements_text = state.element_tree.clickable_elements_to_string(
-            include_attributes=[
-                "title",
-                "type",
-                "name",
-                "role",
-                "tabindex",
-                "aria-label",
-                "placeholder",
-                "value",
-                "alt",
-                "aria-expanded",
-            ]
-        )
-
-        # --- 2. Add context about scrolling ---
-        has_content_above = (state.pixels_above or 0) > 0
-        has_content_below = (state.pixels_below or 0) > 0
-
-        if elements_text:
-            if has_content_above:
-                elements_text = f"... {state.pixels_above} pixels above - scroll or extract content to see more ...\n{elements_text}"
-            else:
-                elements_text = f"[Start of page]\n{elements_text}"
-
-            if has_content_below:
-                elements_text = f"{elements_text}\n... {state.pixels_below} pixels below - scroll or extract content to see more ..."
-            else:
-                elements_text = f"{elements_text}\n[End of page]"
-        else:
-            elements_text = ""
-
-        return elements_text
-
+    
     def _format_node(
         self,
         node: DOMElementNode,

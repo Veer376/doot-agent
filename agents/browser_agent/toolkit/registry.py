@@ -10,7 +10,7 @@ from .types import FilterContext
 if TYPE_CHECKING:
     from browser_use.types import BrowserState
     from browser_use.context import BrowserContext
-    from ..agent import AgentState
+    from ..agent import AgentState, AgentContext
     from playwright.async_api import Page
 
 logger = get_agent_logger("tool_registry")
@@ -48,12 +48,14 @@ class ToolRegistry:
 
     async def get_active_tools(
         self,
-        browser_context: "BrowserContext",
-        browser_state: "BrowserState",
+        agent_context: "AgentContext",
         agent_state: "AgentState",
     ) -> list[Callable]:
         """Builds a context from the current states and returns a list of active tools."""
-
+        
+        browser_context: BrowserContext = agent_context.browser_context
+        browser_state: BrowserState = browser_context.current_state
+        
         domain = urlparse(browser_state.url).hostname
 
         if not domain:
@@ -91,7 +93,6 @@ class ToolRegistry:
                 active_tools.append(tool_func)
                 tool_names.append(name)
 
-        logger.info(f"Text field focused: {context.text_field_focused}")
         logger.info(f"Active tools: {tool_names}")
         return active_tools
 

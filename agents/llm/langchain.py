@@ -23,16 +23,16 @@ class LangChainLLM(LLM):
     async def __call__(
         self,
         messages: MessageBlueprintBase|list[BaseMessage],
-        tools: list[Callable]|None = None,
         config: LLMConfig|None = None,
     ) -> AIMessage:
         """Get a response from langgraph LLM."""
 
         # Instead of concatenating provider and model name, pass them separately
-        model = init_chat_model(self.model_name, model_provider=self.provider)
+        model = init_chat_model(self.model_name, model_provider=self.provider, temperature=config.temperature if config else 0.5)
         
+        tools = []
         if isinstance(messages, MessageBlueprintBase):
-            messages = messages.to_langchain_format()
+            messages, tools = messages.to_langchain_format()
 
         # We're ignoring the config parameter for now since LangChain doesn't need it
         # but we keep it in the method signature for compatibility with the LLM interface

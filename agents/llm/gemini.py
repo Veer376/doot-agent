@@ -54,13 +54,14 @@ class GeminiLLM(LLM):
     async def __call__(
         self,
         message_plan: MessageBlueprintBase,
-        tools: list[Callable] | None = None,
         config: LLMConfig | None = None,
     ) -> GeminiMessage:
         """Get response from Gemini API and convert it to GeminiMessage format."""
 
         from langchain_core.tools import InjectedToolArg
-
+        
+        system_instructions, contents, tools = message_plan.to_gemini_format()
+        
         processed_tools = []
         for tool in tools if tools else []:
             try:
@@ -73,7 +74,6 @@ class GeminiLLM(LLM):
                 )
                 processed_tools.append(tool)
 
-        system_instructions, contents = message_plan.to_gemini_format()
 
         async def get_response():
             return await self.client.aio.models.generate_content(
@@ -81,7 +81,7 @@ class GeminiLLM(LLM):
                 contents=contents,
                 config=types.GenerateContentConfig(
                     system_instruction=system_instructions,
-                    tools=processed_tools,
+                    tools= processed_tools if processed_tools else None,
                     temperature=config.temperature if config else 0.5,
                     automatic_function_calling=types.AutomaticFunctionCallingConfig(
                         disable=True
@@ -233,7 +233,8 @@ class GeminiLLM(LLM):
                 logger.warning("Socket connection test failed")
                 if time.time() - start > max_seconds:
                     return False
-
+                
+    # TODO: include the InjectedStore, InjectedState
     def strip_injected_args(self, func, injected_type):
         """
         Removes parameters that are annotated with the specified injected_type.
