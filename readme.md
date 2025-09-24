@@ -1,29 +1,21 @@
 TODO: 
-1. implement the drop down tool.
-2. implement the extract tool.
-3. write the evaluation files.
-4. Implement the dropdown logic with click and type tool only. 
-If the model types in the dropdown then we check if its the dropdown and if anything is selected then we hit enter. and instruct the user that the previous element was the dropdown and verify if the selection is correct.
-And if the model clicks on the dropdown then we check if its the dropdown and get the dropdown options and return the options with the instruction that its the dropdown and then expose the select_dropdown_options.
 
+Built-in middleware
+LangChain provides several built in middleware to use off-the-shelf - https://docs.langchain.com/oss/python/langchain/middleware?ref=blog.langchain.com#summarization
 
-VIDE CODING:
-1. adapt the element label adapt based on dark mode or light mode.
+Summarization
+Human-in-the-loop
+Anthropic prompt caching
 
-### Note: This project is still under development and not meant for open source.
+TERMS:
 
-# Orbit Agent
-Orbit agent is a browser use tool, with advance programming techniques and agentic architecture to automate tasks in web browser with improved token utilization, accuracy, speed and reliability.
+1. Context Engineering - Dynamic Tool filtering, prompt formation etc.
+EXAMPLES:
+Some basic examples of good context engineering include:
 
-## Features
-- Dynamic tool filtering and selection based on criteria, browser state and agent state.
-- Browser perception shifting based on browser state.
-- Dynamic prompt injecting.
-- Intelligent extraction tools for extracting the relevant info precisely using contextual dom.
+a. Tool use: Making sure that if an agent needs access to external information, it has tools that can access it. When tools return information, they are formatted in a way that is maximally digestable for LLMs
+b. Short term memory: If a conversation is going on for a while, creating a summary of the conversation and using that in the future.
+c. Long term memory: If a user has expressed preferences in a previous conversation, being able to fetch that information.
+d. Prompt Engineering: Instructions for how an agent should behave are clearly enumerated in the prompt.
+e. Retrieval: Fetching information dynamically and inserting it into the prompt before calling the LLM.
 
-Still building.
-- Agentic architecture for parallel task execution with sub agents like analyzer, planner, executor and extractor.
-
-
-## DEMO: 
-![Download Demo](https://raw.githubusercontent.com/Veer376/orbit-agent/main/demo.mp4)

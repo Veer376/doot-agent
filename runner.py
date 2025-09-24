@@ -8,7 +8,7 @@ from utils.pretty_stats import pretty_stats
 import logging
 from agents.llm.usage_stats import get_usage_stats
 import asyncio
-from logging_config import setup_logging
+from core.utils.logging_config import setup_logging
 from agents.llm import LLMConfig
 
 
