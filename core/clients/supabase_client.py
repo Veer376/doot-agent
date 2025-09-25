@@ -1,13 +1,5 @@
-"""
-Centralized database connection management for AgentPress using Supabase.
-"""
-
 from typing import Optional
 from supabase import create_async_client, AsyncClient
-import base64
-import uuid
-from datetime import datetime
-import threading
 import logging
 import os
 from dotenv import load_dotenv
@@ -16,93 +8,50 @@ load_dotenv()
 
 logger = logging.getLogger("supabase_client")
 
-class DBConnection:
-    """Thread-safe singleton database connection manager using Supabase."""
+_client: AsyncClient | None = None
+
+async def _build_client() -> AsyncClient:
     
-    _instance: Optional['DBConnection'] = None
-    _lock = threading.Lock()
+    supabase_url = os.getenv("SUPABASE_URL")
+    supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
 
-    def __new__(cls):
-        if cls._instance is None:
-            with cls._lock:
-                # Double-check locking pattern
-                if cls._instance is None:
-                    cls._instance = super().__new__(cls)
-                    cls._instance._initialized = False
-                    cls._instance._client = None
-        return cls._instance
+    if not supabase_url or not supabase_key:
+        logger.error("Missing required environment variables for Supabase connection")
+        raise RuntimeError("SUPABASE_URL and a key (SERVICE_ROLE_KEY or ANON_KEY) environment variables must be set.")
 
-    def __init__(self):
-        """No initialization needed in __init__ as it's handled in __new__"""
-        pass
+    logger.debug("Building new Supabase client")
 
-    async def initialize(self):
-        """Initialize the database connection."""
-        if self._initialized:
-            return
-                
+    client = await create_async_client(
+        supabase_url,
+        supabase_key,
+    )
+
+    return client
+
+async def get_supabase() -> AsyncClient:
+    global _client
+    if _client is None:
+        _client = await _build_client()
+    return _client
+
+async def close_supabase():
+    global _client
+    if _client is not None:
         try:
-            supabase_url = os.getenv("SUPABASE_URL")
-            # Use service role key preferentially for backend operations
-            supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
-            
-            if not supabase_url or not supabase_key:
-                logger.error("Missing required environment variables for Supabase connection")
-                raise RuntimeError("SUPABASE_URL and a key (SERVICE_ROLE_KEY or ANON_KEY) environment variables must be set.")
-
-            logger.debug("Initializing Supabase connection")
-            
-            # Create Supabase client with timeout configuration
-            self._client = await create_async_client(
-                supabase_url, 
-                supabase_key,
-            )
-            
-            self._initialized = True
-            logger.debug(f"Database connection initialized with Supabase")
-            
+            if hasattr(_client, "close"):
+                await _client.close()
         except Exception as e:
-            logger.error(f"Database initialization error: {e}")
-            raise RuntimeError(f"Failed to initialize database connection: {str(e)}")
-
-    @classmethod
-    async def disconnect(cls):
-        """Disconnect from the database."""
-        if cls._instance and cls._instance._client:
-            logger.debug("Disconnecting from Supabase database")
-            try:
-                # Close Supabase client
-                if hasattr(cls._instance._client, 'close'):
-                    await cls._instance._client.close()
-                    
-            except Exception as e:
-                logger.warning(f"Error during disconnect: {e}")
-            finally:
-                cls._instance._initialized = False
-                cls._instance._client = None
-                logger.debug("Database disconnected successfully")
-
-    @property
-    async def client(self) -> AsyncClient:
-        """Get the Supabase client instance."""
-        if not self._initialized:
-            logger.debug("Supabase client not initialized, initializing now")
-            await self.initialize()
-        if not self._client:
-            logger.error("Database client is None after initialization")
-            raise RuntimeError("Database not initialized")
-        return self._client
-
+            logger.error(f"Error closing Supabase connection: {e}")
+        _client = None
+        
+async def test():
+    client = await get_supabase()
+    result = await client.table("threads").select("*").execute()
+    if getattr(result, "error", None):
+        # result.error can be None or an object depending on client version
+        raise RuntimeError(f"Error fetching threads: {getattr(result.error, 'message', result.error)}")
+    print(f"Threads: {result.data}")
 
 if __name__ == "__main__":
     import asyncio
-
-    async def test_connection():
-        db = DBConnection()
-        await db.initialize()
-        client = await db.client
-        response = await client.from_("threads").select("*").execute()
-        print("Test query response:", response)
-        await DBConnection.disconnect()
-
-    asyncio.run(test_connection())
+    asyncio.run(test())
