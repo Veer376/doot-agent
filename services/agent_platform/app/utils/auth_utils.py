@@ -1,8 +1,7 @@
-from core.clients.supabase_client import DBConnection
-from fastapi import Request, HTTPException, status
+from fastapi import Body, Query, Request, HTTPException, status, Path
 import base64
 import json
-from typing import Optional
+from typing import Optional, Any
 import uuid
 
 

@@ -9,63 +9,38 @@ import sys
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
 from langgraph_sdk.schema import Thread
-from ..models import ThreadCreate, ThreadSearchRequest
+from langgraph_api.state import state_snapshot_to_thread_state
+from ..models import ThreadCreate, ThreadSearchRequest, RunCreateStateful, ThreadStateSearch
 from langgraph.graph import START, END, StateGraph, MessagesState
-from langgraph.store.base import Item
+from core.worker import graph
+import pprint
 
-from ..utils.utils import state_snapshot_to_thread_state
+# from ..utils.utils import state_snapshot_to_thread_state
 from core.worker import process_run
-from core.clients.redis_client import redis_client
-from core.clients.supabase_client import DBConnection
-from core.clients.langgraph_store import store
-from core.clients.langgraph_checkpointer import checkpointer
+from core.clients import get_redis, get_supabase, checkpointer
 from ..utils.auth_utils import authenticate_user
 
-import pprint
 pp = pprint.PrettyPrinter(indent=1, width=80)
-
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    stream=sys.stdout,
-)
 logger = logging.getLogger("threads")
 
+threads = APIRouter()
 
 
-threads_router = APIRouter()
-
-
-class RunCreate(BaseModel):
-    """Schema for creating a run."""
-
-    assistant_id: Optional[str] = Field(
-        None, description="ID of the assistant to use for this run"
-    )
-    input: Optional[Dict[str, Any]] = Field(None, description="Input for the run")
-    stream_mode: Optional[List[str]] = Field(
-        None, description="Stream modes for the run"
-    )
-    config: Optional[Dict[str, Any]] = Field(
-        None, description="Configuration for the run"
-    )
-    context: Optional[Dict[str, Any]] = Field(None, description="Context for the run")
-    metadata: Optional[Dict[str, Any]] = Field(None, description="Metadata for the run")
-
-thread_ids = []
-
-@threads_router.post("", summary="Create a new thread", tags=["threads"])
+@threads.post(
+    "", 
+    summary="Create a new thread", 
+    tags=["threads"]
+)
 async def create_thread(
     body: ThreadCreate = Body(...),
     user_id: str = Depends(authenticate_user),
-)->Thread:
-    """Create a new thread. This is a minimal implementation that just returns a thread ID."""
-    # TODO: check if the thread is already exists
+) -> Thread:
+    """Create a new thread."""
     
     if user_id:
-        print(f"Authenticated user_id: {user_id}")
-        
-    if getattr(body, "supersteps", None) or getattr(body, "values", None):
+        logger.debug(f"Authenticated user_id: {user_id}")
+
+    if body.get("supersteps") or body.get("values"):
         logger.error(f"Got Supersteps or values, but supersteps or values not supported yet")
         raise ValueError("supersteps or values not supported yet")
     
@@ -79,48 +54,51 @@ async def create_thread(
         interrupts={}
     )
     
-    db = DBConnection()
-    await db.initialize()
-    client = await db.client
-    
-    result = await client.table("threads").insert(
-        {
-            "user_id": user_id, 
-            **thread
-        }).execute()
-    
-    print(f"Insert Result: {result.data}")
-    
+    try:
+        supabase_client = await get_supabase()
+        result = await supabase_client.table("threads").insert({"user_id": user_id, **thread}).execute()
+        
+        if error := getattr(result, "error", None):
+            logger.error(f"Error inserting thread into database: {error}")
+            raise HTTPException(status_code=500, detail=f"Internal server error: {error} while creating thread")
+
+        logger.debug(f"Thread created: {getattr(result, 'data', None)}")
+        
+    except Exception as e:
+        logger.error(f"Error creating thread: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {e} while creating thread")
+        
     return thread
 
 
-
-@threads_router.post(
+@threads.post(
     "/{thread_id}/runs/stream",
     summary="stream output from a run",
     tags=["threads", "runs"],
 )
 async def stream_thread_run(
     thread_id: str,
-    body: Any = Body(...),
+    run: RunCreateStateful = Body(...),
 ):
-    """Join a run stream.
-    This endpoint streams output in real-time from a run.
-    If the run has been created with stream_resumable=true, the stream can be resumed from the last seen event ID.
-    """
+    """Create a run in existing thread. Stream the output."""
+    
     run_id = f"run_{uuid.uuid4().hex[:8]}"
     
-    asyncio.create_task(process_run(run_id=run_id, thread_id=thread_id, body=body))
+    pp.pprint(run)
+
+    asyncio.create_task(process_run(run_id=run_id, thread_id=thread_id, body=run))
 
     async def generator():
+        redis_client = get_redis()
         pubsub = redis_client.pubsub()
         await pubsub.subscribe(f"run:{run_id}:stream")
-        print(f"[GENERATOR] Subscribed to Redis channel: run:{run_id}:stream")
+        logger.debug(f"Subscribed to Redis channel: run:{run_id}:stream")
 
         try:
             async for message in pubsub.listen():  # listens indefinitely
                 if message is None:
                     continue
+                
                 if message["type"] == "message":
                     data = message["data"]
 
@@ -173,38 +151,45 @@ async def stream_thread_run(
     return response
 
 
-@threads_router.post("/search", summary="Search for threads", tags=["threads"])
+@threads.post(
+    "/search", 
+    summary="Search for threads", 
+    tags=["threads"]
+)
 async def search_threads(
-    body: ThreadSearchRequest = Body(...),
-    user_id: str = Depends(authenticate_user)
+    user_id: str = Depends(authenticate_user),
+    body: ThreadSearchRequest = Body(...)
 ):
+    """Search for threads.
+    This endpoint also functions as the endpoint to list all threads.
     """
-    Search for threads. This is a minimal implementation that just returns an empty list
-    since we're focusing on direct runs rather than thread-based operations.
-    """
+    # NOTE: implement the proper filtering based on the request body.
     try:
-        db = DBConnection()
-        await db.initialize()
-        client = await db.client
-        query = client.table("threads").select("*").eq("user_id", user_id)
-            
+        supabase_client = await get_supabase()
+        query = (
+            supabase_client
+            .table("threads")
+            .select("*")
+            .eq("user_id", user_id)
+        )
+
         if body.ids:
             query = query.in_("thread_id", body.ids)
-        
+
         # if body.metadata:
         #     for key, value in body.metadata.items():
         #         query = query.eq(f"metadata->{key}", value)
-        
+
         if body.limit:
             query = query.limit(body.limit)
-        
+
         if body.offset:
             query = query.offset(body.offset)
-        
+
         result = await query.execute()
-        
-        threads = result.data or []   
-    
+
+        threads = result.data or []
+
     except Exception as e:
         logger.error(f"Error searching threads: {e}")
         raise HTTPException(
@@ -215,36 +200,28 @@ async def search_threads(
     return threads
 
 
-@threads_router.post(
+@threads.post(
     "/{thread_id}/history",
     summary="Get thread history",
     tags=["threads"],
 )
-async def get_thread_history(
+async def get_thread_history_post(
     thread_id: str,
-    body: Any = Body(...),
+    body: ThreadStateSearch = Body(...),
 ):
-    """
-    Get the history of a thread. This endpoint is critical for the UI's initialization.
-    The UI calls this repeatedly during startup which can cause state resets.
-    Uses the thread cache to ensure consistent messages.
-    """
-    pp.pprint(f"BODY: {body}")
-    thread_states = []
+    """Get all past states for a thread.  NOTE: In the official docs, state snapshots are fetchted from the graph_id configured in the thread_id. 
+    For now we will use the new minimal compiled graph. """
     
     try:
-        graph = StateGraph(MessagesState).add_edge(START, END).compile(checkpointer=checkpointer)
-        async for state_snapshot in graph.aget_state_history(
-            config={"configurable": {"thread_id": thread_id}},
-            # limit=body.get("limit", None)
-        ):
-
-            thread_state = state_snapshot_to_thread_state(state_snapshot)
-            # pp.pprint(thread_state)
-            thread_states.append(thread_state)
-             
-        return thread_states
-       
+        # graph = StateGraph(MessagesState).add_edge(START, END).compile(checkpointer=checkpointer)
+        return [
+            state_snapshot_to_thread_state(state)
+            async for state in graph.aget_state_history(
+                config={"configurable": {"thread_id": thread_id}},
+                # limit=body.get("limit", None)
+            )
+        ]
+        
     except Exception as e:
-        print(f"Error fetching thread history for thread {thread_id}: {e}")
+        logger.error(f"Error fetching thread history for thread {thread_id}: {e}")
         return []

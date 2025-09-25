@@ -1,54 +1,32 @@
-from datetime import datetime
+"""For model schema pydantic BaseModel is used for data validation but for the inner fields 
+TypedDict validation overhead in complex data strucutres."""
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Sequence, Union, Literal, TypedDict
 from uuid import UUID
 from pydantic import BaseModel, Field, HttpUrl
-from langgraph.types import Command
-from langgraph_sdk.schema import ThreadSelectField, ThreadSortBy, ThreadStatus, SortOrder
+from langgraph_sdk.schema import (
+    ThreadSelectField, 
+    ThreadSortBy, 
+    ThreadStatus, 
+    SortOrder, 
+    Checkpoint, 
+    Command,
+    Config,
+    Context,
+    Durability,
+    IfNotExists,
+    MultitaskStrategy,
+    DisconnectMode,
+    StreamMode,
+)
 
-Node = str
-Metadata = Dict[str, Any]
-Context = Dict[str, Any]
-Version = str
-Name = str
-Description = str | None
-Schedule = str
-Payload = Dict[str, Any]
-StateSchema = Dict[str, Any]
-ConfigSchema = Dict[str, Any] | None
-ContextSchema = Dict[str, Any] | None
-InputSchema = Dict[str, Any]
-OutputSchema = Dict[str, Any]
-Kwargs = Dict[str, Any]
-Checkpoint = str | None
-Interrupts = List[Any]
-Before = Any
-Key = str
-Filter = Dict[str, Any]
 Json = Dict[str, Any] | None
 
 # Enum definitions
 class IfExists(str, Enum):
     RAISE = "raise"
     DO_NOTHING = "do_nothing"
-
-
-class MultitaskStrategy(str, Enum):
-    REJECT = "reject"
-    ROLLBACK = "rollback"
-    INTERRUPT = "interrupt"
-    ENQUEUE = "enqueue"
-
-
-class SortBy(str, Enum):
-    CRON_ID = "cron_id"
-    ASSISTANT_ID = "assistant_id"
-    THREAD_ID = "thread_id"
-    NEXT_RUN_DATE = "next_run_date"
-    END_TIME = "end_time"
-    CREATED_AT = "created_at"
-    UPDATED_AT = "updated_at"
-
 
 class RunStatus(str, Enum):
     PENDING = "pending"
@@ -58,81 +36,93 @@ class RunStatus(str, Enum):
     TIMEOUT = "timeout"
     INTERRUPTED = "interrupted"
 
+class TTL(TypedDict):
+    strategy: str
+    ttl: int
 
-class Durability(str, Enum):
-    SYNC = "sync"
-    ASYNC = "async"
-    EXIT = "exit"
+class ThreadSuperstepUpdate(TypedDict):
+    as_node: str
+    command: Command | None
+    values: dict[str, Any] | None
 
-
-class IfNotExists(str, Enum):
-    CREATE = "create"
-    REJECT = "reject"
-
-
-class OnCompletion(str, Enum):
-    DELETE = "delete"
-    KEEP = "keep"
-
-
-class OnDisconnect(str, Enum):
-    CANCEL = "cancel"
-    CONTINUE = "continue"
-
-
-class StreamMode(str, Enum):
-    VALUES = "values"
-    MESSAGES = "messages"
-    MESSAGES_TUPLE = "messages-tuple"
-    TASKS = "tasks"
-    CHECKPOINTS = "checkpoints"
-    UPDATES = "updates"
-    EVENTS = "events"
-    DEBUG = "debug"
-    CUSTOM = "custom"
-
-class RunsCancelStatus(str, Enum):
-    PENDING = "pending"
-    RUNNING = "running"
-    ALL = "all"
-
-class TTL(BaseModel):
-    strategy: str = Field("delete", description="TTL strategy, e.g., 'delete'")
-    ttl: int = Field(..., description="Time-to-live in minutes")
-
-# class Command(BaseModel):
-    
-    
-# class ThreadSuperstepUpdate(BaseModel):
-#     as_node: str = Field(..., description="The node to update the superstep for.")
-#     command: Command | None = Field(None, description="The command to run.")
-#     values: dict[str, Any] | None = Field(None, description="New values to update in the thread state.")    
-    
-# ThreadCreate model
-class ThreadCreate(BaseModel):
+@dataclass
+class ThreadCreate:
     """Payload for creating a thread."""
     
-    if_exists: IfExists = Field(
-        IfExists.RAISE,
-        description="How to handle duplicate creation. Must be either 'raise' (raise error if duplicate), or 'do_nothing' (return existing thread).",
-    )
-    metadata: dict[str, Any] | None = Field(None, description="Metadata to add to thread.")
-    supersteps: list[Any] | None = Field(
-        None, description="Initial supersteps to set in the thread."
-    )
-    thread_id: str | None = Field(None, description="The ID of the thread. If not provided, a random UUID will be generated.",)
-    ttl: TTL | None = Field(None, description="Time-to-live for this thread.")
-
-
-class ThreadSearchRequest(BaseModel):
+    if_exists: IfExists = IfExists.RAISE
+    metadata: dict[str, Any] | None = None
+    supersteps: list[Any] | None = None
+    thread_id: str | None = None
+    ttl: TTL | None = None
     
-    ids: Sequence[str] | None = Field(None, description="List of thread IDs to search for.")
-    limit: int | None = Field(10, description="Maximum number of threads to return.")
-    metadata: Json = Field(None, description="Metadata key-value pairs to filter threads.")
-    offset: int = Field(0, description="Number of threads to skip for pagination.")
-    select: list[ThreadSelectField] | None = Field(None, description="List of fields to include in the response.")
-    sort_by: ThreadSortBy | None = Field(None, description="Field to sort the results by.")
-    sort_order: SortOrder | None = Field(None, description="Sort order, either 'asc' or 'desc'.")
-    status: ThreadStatus | None = Field(None, description="Filter threads by their status.")
-    values: Json = Field(None, description="Filter threads by their values.")
+    def __getitem__(self, key):
+        return getattr(self, key)
+    
+    def get(self, key, default=None):
+        return getattr(self, key, default)
+    
+@dataclass
+class ThreadSearchRequest:
+    """Payload for listing threads."""
+    
+    ids: Sequence[str] | None = None
+    limit: int = 10
+    metadata: Json = None
+    offset: int = 0
+    select: list[ThreadSelectField] | None = None
+    sort_by: ThreadSortBy | None = None
+    sort_order: SortOrder | None = None
+    status: ThreadStatus | None = None
+    values: Json = None
+    
+    def __getitem__(self, key):
+        return getattr(self, key)
+    
+    def get(self, key, default=None):
+        return getattr(self, key, default)
+    
+@dataclass
+class RunCreateStateful:
+    """Payload for creating a run."""
+    
+    assistant_id: str
+    after_seconds: int | None = None
+    checkpoint: Checkpoint | None = None
+    checkpoint_during: bool = False
+    command: Command | None = None
+    config: Config | None = None
+    context: Context | None = None
+    durability: Durability = "async"
+    feedback_keys: list[str] | None = None
+    if_not_exists: IfNotExists = "reject"
+    input: dict[str, Any] | None = None
+    interrupt_before: str | list[str] | None = None
+    interrupt_after: str | list[str] | None = None
+    metadata: Json = None
+    multitask_strategy: MultitaskStrategy = "enqueue"
+    on_disconnect: DisconnectMode = "cancel"
+    stream_mode: list[StreamMode] | StreamMode = "messages"
+    stream_resumable: bool = False  
+    stream_subgraphs: bool = False
+    webhook: str | None = None
+    
+    def __getitem__(self, key):
+        return getattr(self, key)
+    
+    def get(self, key, default=None):
+        return getattr(self, key, default)
+    
+    
+@dataclass   
+class ThreadStateSearch:
+    before: Config | None = None
+    checkpoint: Checkpoint | None = None
+    limit: int = 10
+    metadata: Json = None
+    
+    def __getitem__(self, key):
+        return getattr(self, key)
+    
+    def get(self, key, default=None):
+        return getattr(self, key, default)
     

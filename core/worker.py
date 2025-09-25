@@ -8,7 +8,7 @@ if str(repo_root) not in sys.path:
     sys.path.insert(0, str(repo_root))
 
 
-from core.clients.redis_client import redis_client
+from core.clients.redis_client import get_redis
 import asyncio
 import uuid
 import time
@@ -44,9 +44,11 @@ from langchain_core.messages import (
 from google import genai
 from google.genai import types
 import json
-from core.clients.supabase_client import DBConnection
 from langchain.chat_models import init_chat_model
 from core.clients.langgraph_checkpointer import checkpointer
+import logging
+
+logger = logging.getLogger("worker")
 
 class State(TypedDict):
     messages: Annotated[list[dict], add_messages]
@@ -55,8 +57,8 @@ class State(TypedDict):
 async def model_node(state: State):
     
     model = init_chat_model("google_genai:gemini-2.0-flash", temperature=0.7)
-    
-    response = await model.ainvoke(state["messages"])
+
+    response = await model.ainvoke(state["messages"][-2:])  # Use only the last two messages
     # response = AIMessage(content="Hello from model node")
     
     return {"messages": [response]}
@@ -73,15 +75,19 @@ graph = (
 
 async def process_run(thread_id: str, run_id: str, body: any):
     """Process a run and stream the results via Redis"""
-
+    
+    redis_client = get_redis()
+    
     message_id = str(uuid.uuid4())
     assistant_id = getattr(body, "assistant_id", None)
     stream_mode = getattr(body, "stream_mode", None)
     input = getattr(body, "input", {}) or body.get("input", {})
     if not input: 
-        raise ValueError("Input cannot be empty")
-    
-    config = getattr(body, "config", {}) or body.get("config", {})
+        logger.warning(f"No input provided for run {run_id} in thread {thread_id}")
+        
+    checkpoint = getattr(body, "checkpoint", None) or {}
+
+    config = getattr(body, "config", None) or {}
     stream_resumable = getattr(body, "stream_resumable", False)
     stream_subgraphs = getattr(body, "stream_subgraphs", False)
 
@@ -90,7 +96,7 @@ async def process_run(thread_id: str, run_id: str, body: any):
         
         async for stream_mode, chunk in graph.astream(
             input=input,
-            config=config or {"configurable": {"thread_id": thread_id}, "recursion_limit": 5000},
+            config=config or {"configurable": {"thread_id": thread_id, **checkpoint}, "recursion_limit": 5000},
             stream_mode=["messages"],
             # subgraphs=stream_subgraphs,
         ):
@@ -170,6 +176,7 @@ async def main():
 
     while True:
         print("Waiting for work...")
+        redis_client = get_redis()
         result = await redis_client.blpop("run:queue", timeout=3)
 
         if result:
