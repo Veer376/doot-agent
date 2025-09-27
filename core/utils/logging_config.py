@@ -62,6 +62,8 @@ def setup_logging(log_level=None):
         "trafilatura.htmlprocessing",
         "trafilatura",
         "grpc._cython.cygrpc",
+        "grpc",
+        "absl",
     ]:
         third_party = logging.getLogger(logger_name)
         third_party.setLevel(logging.ERROR)
