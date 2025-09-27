@@ -33,19 +33,20 @@ async def create_thread(
     user_id: str = Depends(authenticate_user),
 ) -> Thread:
     """Create a new thread."""
+    # TODO: handle the TTL
     
     if user_id:
         logger.debug(f"Authenticated user_id: {user_id}")
 
-    if body.get("supersteps") or body.get("values"):
+    if body.get("supersteps", None) or body.get("values", None):
         logger.error(f"Got Supersteps or values, but supersteps or values not supported yet")
         raise ValueError("supersteps or values not supported yet")
     
     thread = Thread(
-        thread_id=body.thread_id or str(uuid.uuid4()),
+        thread_id=body.get("thread_id", None) or str(uuid.uuid4()),
         created_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         updated_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        metadata=body.metadata or {},
+        metadata=body.get("metadata", None) or {},
         status="idle",
         values={},
         interrupts={}
@@ -179,18 +180,18 @@ async def search_threads(
             .eq("user_id", user_id)
         )
 
-        if body.ids:
-            query = query.in_("thread_id", body.ids)
+        if ids := body.get("ids", None):
+            query = query.in_("thread_id", ids)
 
         # if body.metadata:
         #     for key, value in body.metadata.items():
         #         query = query.eq(f"metadata->{key}", value)
 
-        if body.limit:
-            query = query.limit(body.limit)
+        if limit := body.get("limit", None):
+            query = query.limit(limit)
 
-        if body.offset:
-            query = query.offset(body.offset)
+        if offset := body.get("offset", None):
+            query = query.offset(offset)
 
         result = await query.execute()
 
@@ -221,10 +222,10 @@ async def get_thread_history_post(
     try:
         graph = StateGraph(MessagesState).add_edge(START, END).compile(checkpointer=checkpointer)
         states = [
-            state_snapshot_to_thread_state(state)
+            state_snapshot_to_thread_state(state) # FIXME: pass the graph_id in thread metadata.
             async for state in graph.aget_state_history(
                 config={"configurable": {"thread_id": thread_id}},
-                # filter=
+                # TODO: Implement filtering
                 before=body.get("before", None),
                 limit=body.get("limit", None)
             )
