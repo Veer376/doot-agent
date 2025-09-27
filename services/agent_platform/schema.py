@@ -1,5 +1,3 @@
-"""For model schema pydantic BaseModel is used for data validation but for the inner fields 
-TypedDict validation overhead in complex data strucutres."""
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Sequence, Union, Literal, TypedDict
@@ -19,6 +17,7 @@ from langgraph_sdk.schema import (
     MultitaskStrategy,
     DisconnectMode,
     StreamMode,
+    RunStatus,
 )
 
 Json = Dict[str, Any] | None
@@ -27,14 +26,6 @@ Json = Dict[str, Any] | None
 class IfExists(str, Enum):
     RAISE = "raise"
     DO_NOTHING = "do_nothing"
-
-class RunStatus(str, Enum):
-    PENDING = "pending"
-    RUNNING = "running"
-    ERROR = "error"
-    SUCCESS = "success"
-    TIMEOUT = "timeout"
-    INTERRUPTED = "interrupted"
 
 class TTL(TypedDict):
     strategy: str
@@ -81,8 +72,8 @@ class ThreadSearchRequest:
     def get(self, key, default=None):
         return getattr(self, key, default)
     
-@dataclass
-class RunCreateStateful:
+
+class RunCreateStateful(TypedDict, total=False):
     """Payload for creating a run."""
     
     assistant_id: str
@@ -105,7 +96,7 @@ class RunCreateStateful:
     stream_resumable: bool = False  
     stream_subgraphs: bool = False
     webhook: str | None = None
-    
+
     def __getitem__(self, key):
         return getattr(self, key)
     
@@ -125,4 +116,19 @@ class ThreadStateSearch:
     
     def get(self, key, default=None):
         return getattr(self, key, default)
+    
+
+
+class Run(TypedDict):
+    run_id: str
+    thread_id: str
+    assistant_id: str
+    status: RunStatus
+    metadata: dict[str, Any]
+    multitask_strategy: MultitaskStrategy
+    created_at: str
+    updated_at: str
+    kwargs: dict[str, Any]
+    
+    
     

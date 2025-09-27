@@ -36,7 +36,7 @@ async def authenticate_user(request: Request) -> str:
     - Raises 401 if missing/invalid
     - Sets the PostgREST client to use this JWT so RLS applies downstream
     """
-
+    # FIXME: verify the token first using supabase client.
     token = _extract_bearer_token(request)
     if not token:
         raise HTTPException(
