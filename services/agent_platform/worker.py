@@ -19,14 +19,18 @@ async def process_run(run: Run):
     thread_id = run["thread_id"]
     metadata = run.get("metadata", {})
     multitask_strategy = run.get("multitask_strategy", "enqueue")
+    kwargs = run.get("kwargs", {})
+    
     # graph: = GRAPHS[run.get("assistant_id", "default")]
     graph = get_graph("chat_agent")
-    kwargs = run.get("kwargs", {})
 
     webhook = kwargs.get("webhook", None)
-    stream_resumable = kwargs.get("stream_resumable", False)
+    stream_resumable = kwargs.get("stream_resumable", False) # TODO: Implement stream resumable handling
     feedback_keys = kwargs.get("feedback_keys", None)
-
+    
+    if metadata or feedback_keys or webhook:
+        logger.warning(f"Run {run_id} has metadata {metadata} or feedback_keys {feedback_keys}, but handling not implemented yet")
+        
     input = kwargs.get("input", None)
     if cmd := kwargs.get("command", None):
         input = map_cmd(cmd)
