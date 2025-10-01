@@ -8,7 +8,6 @@ from langgraph_sdk.schema import (
     ThreadSortBy, 
     ThreadStatus, 
     SortOrder, 
-    Checkpoint, 
     Command,
     Config,
     Context,
@@ -18,14 +17,12 @@ from langgraph_sdk.schema import (
     DisconnectMode,
     StreamMode,
     RunStatus,
+    AssistantSelectField,
+    AssistantSortBy
 )
 
 Json = Dict[str, Any] | None
-
-# Enum definitions
-class IfExists(str, Enum):
-    RAISE = "raise"
-    DO_NOTHING = "do_nothing"
+IfExists = Literal["raise", "do_nothing"]
 
 class TTL(TypedDict):
     strategy: str
@@ -40,7 +37,7 @@ class ThreadSuperstepUpdate(TypedDict):
 class ThreadCreate:
     """Payload for creating a thread."""
     
-    if_exists: IfExists = IfExists.RAISE
+    if_exists: IfExists = "raise"
     metadata: dict[str, Any] | None = None
     supersteps: list[Any] | None = None
     thread_id: str | None = None
@@ -72,6 +69,12 @@ class ThreadSearchRequest:
     def get(self, key, default=None):
         return getattr(self, key, default)
     
+    
+class Checkpoint(TypedDict, total=False):
+    thread_id: str
+    checkpoint_ns: str # Namespace for the checkpoint; used internally to manage subgraph state.
+    checkpoint_id: str | None
+    checkpoint_map: dict[str, Any] | None
 
 class RunCreateStateful(TypedDict, total=False):
     """Payload for creating a run."""
@@ -130,5 +133,26 @@ class Run(TypedDict):
     updated_at: str
     kwargs: dict[str, Any]
     
+@dataclass
+class Assistant:
+    assistant_id: str
+    config: Config
+    created_at: str
+    graph_id: str
+    metadata: dict[str, Any]
+    updated_at: str
+    context: Context | None = None
+    description: str | None = None
+    name: str | None = None
+    version: str | None = None
     
     
+class AssistantSearchRequest(TypedDict, total=False):
+    """Payload for listing assistants."""
+    graph_id: str
+    limit: int = 10
+    metadata: Json
+    offset: int = 0
+    select: list[AssistantSelectField]
+    sort_by: AssistantSortBy
+    sort_order: SortOrder
