@@ -4,7 +4,7 @@ from typing import Any, Annotated, Literal, TYPE_CHECKING
 from pydantic import BaseModel, Field
 from langchain_core.tools import InjectedToolArg
 from core.utils.logging_utils import get_toolkit_logger
-from browser_use.context import BrowserContext
+from core.browser_use.context import BrowserContext
 from .registry import tool_registry  # Import from the registry in the same directory
 from .utils import get_extraction_plan
 from readability import Document
@@ -556,7 +556,6 @@ async def finish_task(
     )
 
 
-@tool_registry.register(is_active=lambda ctx: ctx.text_field_focused)
 async def press_keys(
     keys: str, browser_context: Annotated[BrowserContext | None, InjectedToolArg] = None
 ) -> ToolResult:

@@ -8,11 +8,11 @@ from .types import FilterContext
 
 # Use forward references
 if TYPE_CHECKING:
-    from browser_use.types import BrowserState
-    from browser_use.context import BrowserContext
-    from ..agent import AgentState, AgentContext
+    from core.browser_use.types import BrowserState
+    from core.browser_use.context import BrowserContext
+    from ..agent import AgentState, BrowserSnapshot
     from playwright.async_api import Page
-
+    
 logger = get_agent_logger("tool_registry")
 
 
@@ -46,39 +46,25 @@ class ToolRegistry:
 
         return decorator
 
-    async def get_active_tools(
+    def get_active_tools(
         self,
-        agent_context: "AgentContext",
         agent_state: "AgentState",
     ) -> list[Callable]:
         """Builds a context from the current states and returns a list of active tools."""
         
-        browser_context: BrowserContext = agent_context.browser_context
-        browser_state: BrowserState = browser_context.current_state
-        
-        domain = urlparse(browser_state.url).hostname
+        browser_snapshot: BrowserSnapshot = agent_state.get("browser_snapshot", {}) or {}
+
+        raw_url = browser_snapshot.get("url", "")
+        domain = urlparse(raw_url or "").hostname if raw_url else None
 
         if not domain:
             domain = "about:blank"
 
-        # Get the current page from browser context
-        page = None
-        try:
-            page = await browser_context.get_agent_current_page()
-        except Exception as e:
-            logger.error(f"Error getting current page: {e}")
-
-        # Check if text field is focused
-        text_field_focused = (
-            await browser_context.is_text_field_focused(page) if page else False
-        )
-
         context = FilterContext(
             domain=domain,
-            step=agent_state.step,
-            last_action=agent_state.last_actions[-1] if agent_state.last_actions else None,
-            text_field_focused=text_field_focused,
-            reserved_tools=agent_state.reserved_tools
+            step=agent_state.get('step', 0),
+            last_action=agent_state.get('last_actions', [])[-1] if agent_state.get('last_actions', []) else None,
+            reserved_tools=agent_state.get('reserved_tools', [])
         )
 
         active_tools = []

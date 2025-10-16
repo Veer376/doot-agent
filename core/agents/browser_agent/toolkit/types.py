@@ -25,6 +25,5 @@ class FilterContext(BaseModel):
     domain: str | None = None
     step: int | None = None
     last_action: str | None = None # FIXME: last action -> last actions
-    text_field_focused: bool = False
     reserved_tools: list[str] = []  # Tools reserved for the next turn only.
 

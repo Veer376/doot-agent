@@ -4,7 +4,7 @@ import asyncio
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from browser_use.context import BrowserContext
+    from core.browser_use.context import BrowserContext
 
 # Base namespace constants
 TOOLKIT_LOGGER_NAMESPACE = "toolkit"
@@ -28,7 +28,7 @@ class BrowserLogger:
         **kwargs,
     ):
 
-        if browser_context is not None:
+        if browser_context is not None and hasattr(browser_context, "animator"):
             try:
                 # Try to get running event loop
                 loop = asyncio.get_running_loop()
@@ -60,7 +60,7 @@ class BrowserLogger:
         self, message: str, browser_context: BrowserContext | None = None, **kwargs
     ):
         self._log("warning", message, browser_context, **kwargs)
-        
+
     def critical(
         self, message: str, browser_context: BrowserContext | None = None, **kwargs
     ):

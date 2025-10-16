@@ -5,41 +5,86 @@ from langchain_core.messages import (
     ToolMessage,
     HumanMessage,
 )
-from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import START, END, StateGraph
-from langgraph.types import Command
 from langgraph.runtime import Runtime
 
 # Dependency imports
-from .toolkit.registry import tool_registry
-from .utils import escalate_error
+from core.agents.browser_agent.toolkit.registry import tool_registry
+from core.agents.browser_agent.utils import escalate_error
 from core.utils.logging_utils import get_agent_logger
-from .message_builder import MessageBuilder
-from .perception import BrowserRepresentationType
-from ..llm import LLM, GeminiLLM, LangChainLLM, LLMConfig
-from .toolkit import ToolResult
-from .messages.error_messages import ToolCallMissing, InvalidToolCall
-from .types import AgentState, AgentContext, MessageBlueprint, Snippet
+from core.agents.browser_agent.message_builder import MessageBuilder
+from core.agents.browser_agent.perception import Screenshot
+from core.agents.llm import LLM, GeminiLLM, LangChainLLM, LLMConfig
+from core.agents.browser_agent.toolkit import ToolResult
+from core.agents.browser_agent.messages.error_messages import ToolCallMissing, InvalidToolCall
+from core.agents.browser_agent.types import AgentState, AgentContext, MessageBlueprint, Snippet, BrowserSnapshot
+from core.agents.browser_agent.browser_runtime import get_browser_context
+from core.clients.langgraph_checkpointer import checkpointer
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_google_genai._enums import HarmBlockThreshold, HarmCategory
 
 logger = get_agent_logger()
+
+model = ChatGoogleGenerativeAI(
+        model="gemini-2.5-flash",
+        temperature=1,
+        max_retries=2,
+        max_output_tokens=None,
+        include_thoughts=True,
+        thinking_budget=-1,
+        # Configure native Gemini tools on model creation
+        tools=[
+            {"google_search_retrieval": {"dynamic_retrieval_config": {"mode": "MODE_DYNAMIC", "dynamic_threshold": 0.3}}}
+        ],
+        safety_settings={
+            HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+            HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+            HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+            HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+            HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY: HarmBlockThreshold.BLOCK_NONE,
+        }
+    )
+async def browser_state_updater(
+    agent_state: AgentState, runtime: Runtime[AgentContext]
+):
+    """Refresh the browser state stored on the agent state."""
+
+    context = runtime.context
+
+    browser_context = await get_browser_context(context)
+
+    if browser_context is None:
+        return {}
+
+    try:
+        state = await browser_context.get_state(cache_clickable_elements_hashes=True)
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Failed to fetch browser state: %s", exc, exc_info=True)
+        return {}
+
+    representation = Screenshot()
+    state_content = representation.get_state_content(state, agent_state)
+
+    browser_snapshot: BrowserSnapshot = {
+        "url": "loading_url", # FIXME: state_content.get("url"),
+        "screenshot": state_content.get("image", ""),
+        "dom_text": state_content.get("text", ""),
+    }
+
+    return {"browser_snapshot": browser_snapshot}
 
 
 async def browser_executor(agent_state: AgentState, runtime: Runtime[AgentContext]):
     """Supervisor node which gathers context and calls the LLM."""
-    
-    context = runtime.context
-    
-    msg_blueprint: MessageBlueprint = await MessageBuilder().build_message_blueprint(
-        context, agent_state
-    )
 
-    llm: LLM = LangChainLLM() if context.llm == "langchain" else GeminiLLM()
-
-    response = await llm.ainvoke(msg_blueprint, context.llm_config)
+    contents = await MessageBuilder().get_context(agent_state)
+    tools = tool_registry.get_active_tools(agent_state)
+    
+    response = await model.bind_tools(tools).ainvoke(contents)
 
     return {
         "messages": [response], 
-        "step": agent_state.step + 1
+        "step": agent_state.get('step', 0) + 1
     }
 
 
@@ -48,17 +93,18 @@ async def tool_executor(agent_state: AgentState, runtime: Runtime[AgentContext])
     """Custom tool node that handles tool execution."""
 
     logger = get_agent_logger("tool_executor")
-    
+
     context: AgentContext = runtime.context
-    
+    browser_context = await get_browser_context(context)
+
     tool_calls = (
-        getattr(agent_state.messages[-1], "tool_calls", [])
-        if len(agent_state.messages) > 0
+        getattr(agent_state.get('messages', [])[-1], "tool_calls", [])
+        if len(agent_state.get('messages', [])) > 0
         else []
     )
 
     if not tool_calls:
-        logger.warning("No tool calls found", context.browser_context)
+        logger.warning("No tool calls found", browser_context)
         raise ToolCallMissing()
 
     tool_results = []
@@ -67,28 +113,31 @@ async def tool_executor(agent_state: AgentState, runtime: Runtime[AgentContext])
     # FIXME: Check if the browser state has been changed since the last action.
     for tool_call in tool_calls:
         tool_name = tool_call["name"]
-
         tool = tool_registry.tools.get(tool_name)
+
+        if tool is None:
+            logger.error("Tool '%s' not found", tool_name)
+            raise InvalidToolCall()
 
         logger.debug(
             f"Executing tool: {tool_name} with args: {tool_call['args']}",
-            context.browser_context,
+            browser_context,
         )
 
         try:
             result: ToolResult = await tool(
-                **tool_call["args"], browser_context=context.browser_context
+                **tool_call["args"], browser_context=browser_context
             )
 
         except ValueError as e:
             logger.error(
                 f"Error occurred while calling tool '{tool_name}': {e}",
-                context.browser_context,
+                browser_context,
             )
             raise InvalidToolCall()
 
         if isinstance(result, Snippet):
-            agent_state.scratchpad.append(result)
+            agent_state.get('scratchpad', []).append(result)
             tool_results.append(
                 ToolMessage(
                     tool_call_id=tool_call.get("id"),
@@ -100,11 +149,11 @@ async def tool_executor(agent_state: AgentState, runtime: Runtime[AgentContext])
                     },
                 )
             )
-        
+
         if result.status == "error":
-            agent_state.consecutive_failures.append(result.message)
+            agent_state.get('consecutive_failures', []).append(result.message)
         else:
-            agent_state.consecutive_failures.clear()
+            agent_state.get('consecutive_failures', []).clear()
 
         reserved_tools.extend(getattr(result, "reserve_tools", []) or [])
 
@@ -126,6 +175,7 @@ async def tool_executor(agent_state: AgentState, runtime: Runtime[AgentContext])
         "reserved_tools": reserved_tools,
     }
 
+
 async def plan_reflect(agent_state: AgentState, runtime: Runtime[AgentContext]):
     """Plans the next action for the agent based on the current state."""
 
@@ -137,14 +187,14 @@ async def plan_reflect(agent_state: AgentState, runtime: Runtime[AgentContext]):
         """
     )
     content = f"""
-        Task: {agent_state.task}
-        Scratchpad: {agent_state.scratchpad}
+        Scratchpad: {agent_state.get('scratchpad', [])}
     """
-    
+
     llm = LangChainLLM()
     response = await llm([system_message, HumanMessage(content=content)])
 
     return {"scratchpad": response}
+
 
 async def task_summarizer(agent_state: AgentState):
     """Summarizes the task and prepares the final message for the user."""
@@ -158,12 +208,10 @@ async def task_summarizer(agent_state: AgentState):
     )
 
     content = [
-        {"type": "text", "text": f"Last messages: {agent_state.messages[-3:]}"},
-        {"type": "text", "text": f"Task: {agent_state.task}"},
+        {"type": "text", "text": f"Last messages: {agent_state.get('messages', [])[-3:]}"},
     ]
-    
-    llm = LangChainLLM()
-    response = await llm([system_message, HumanMessage(content=content)])
+
+    response = await model.ainvoke([system_message, HumanMessage(content=content)])
 
     return {"messages": [response]}
 
@@ -171,7 +219,7 @@ async def task_summarizer(agent_state: AgentState):
 def route_condition(agent_state: AgentState) -> Literal["continue", "conclude", "end"]:
     logger = get_agent_logger("router")
 
-    messages = agent_state.messages
+    messages = agent_state.get('messages', [])
     last_message = messages[-1] if messages else None
 
     if (
@@ -188,34 +236,40 @@ def route_condition(agent_state: AgentState) -> Literal["continue", "conclude", 
 
     return "continue"
 
+
 def route_plan_reflect(agent_state: AgentState) -> Literal["plan_reflect", "continue"]:
-    """Route to the plan_reflect node every 6 steps to allow reflection on progress.
-    """
+    """Route to the plan_reflect node every 6 steps to allow reflection on progress."""
     # If the current step is divisible by 6, route to plan_reflect
-    if agent_state.step > 0 and agent_state.step % 6 == 0:
-        logger.debug(f"Step {agent_state.step}: Routing to plan_reflect for periodic reflection")
+    if agent_state.get('step', 0) > 0 and agent_state.get('step', 0) % 6 == 0:
+        logger.debug(
+            f"Step {agent_state.get('step', 0)}: Routing to plan_reflect for periodic reflection"
+        )
         return "plan_reflect"
-    
+
     # Otherwise continue with normal flow
     return "continue"
 
 
 graph = (
-    StateGraph(AgentState, context_schema=AgentContext)
+    StateGraph(AgentState)
+    .add_node("browser_state_updater", browser_state_updater)
     .add_node("browser_executor", browser_executor)
     .add_node("tool_executor", tool_executor)
     .add_node("task_summarizer", task_summarizer)
     .add_node("plan_reflect", plan_reflect)
-    
-    .add_edge(START, "browser_executor")
+    .add_edge(START, "browser_state_updater")
+    .add_edge("browser_state_updater", "browser_executor")
     .add_conditional_edges(
         "browser_executor",
         route_condition,
         {"continue": "tool_executor", "end": END, "conclude": "task_summarizer"},
     )
-
-    .add_conditional_edges("tool_executor", route_plan_reflect, {"plan_reflect": "plan_reflect", "continue": "browser_executor"})
-    .add_edge("plan_reflect", "browser_executor")
+    .add_conditional_edges(
+        "tool_executor",
+        route_plan_reflect,
+        {"plan_reflect": "plan_reflect", "continue": "browser_state_updater"},
+    )
+    .add_edge("plan_reflect", "browser_state_updater")
     .add_edge("task_summarizer", END)
-    .compile()
+    .compile(checkpointer=checkpointer)
 )

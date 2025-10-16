@@ -33,7 +33,7 @@ class DomService:
         self.xpath_cache = {}
 
         self.js_code = (
-            resources.files("browser_use.dom").joinpath("buildDomTree.js").read_text()
+            resources.files("core.browser_use.dom").joinpath("buildDomTree.js").read_text()
         )
 
     # region - Clickable elements

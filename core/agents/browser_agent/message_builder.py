@@ -10,13 +10,12 @@ from .perception import (
     BrowserRepresentationType,
 )
 from core.utils.logging_utils import get_message_builder_logger
-from .types import MessageBlueprint
 from .messages.messages import message_registry
 from .toolkit.registry import tool_registry
 
 if TYPE_CHECKING:
-    from browser_use.types import BrowserState
-    from .agent import AgentState, AgentContext
+    from core.browser_use.types import BrowserState
+    from core.agents.browser_agent.agent import AgentState, AgentContext
 
 logger = get_message_builder_logger("executor")
 
@@ -45,12 +44,13 @@ For example: commit(type="Adaptation", message="Filtered job search using 24 hou
     # Additional instructions, usage discouraged.
     "In particular, consider whether the task is already done."
 
-    def __init__(self, type: BrowserRepresentationType = BrowserRepresentationType.SCREENSHOT):
+    def __init__(
+        self, type: BrowserRepresentationType = BrowserRepresentationType.SCREENSHOT
+    ):
         """Initialize with a specific representation type."""
 
         self.type = type
         self.state_representation = self._create_state_representation()
-        self.message_blueprint = MessageBlueprint()
 
     def _create_state_representation(self) -> BrowserRepresentation:
         """Create a BrowserRepresentation instance based on the specified type."""
@@ -69,105 +69,57 @@ For example: commit(type="Adaptation", message="Filtered job search using 24 hou
         else:
             raise ValueError(f"Unknown representation type: {self.type}")
 
-    def build_system_message(self):
-        """Return the system message with dynamic instructions."""
-
-        system_message = self.SYSTEM_MESSAGE_TEMPLATE.format(
-            state_instructions=self.state_representation.get_state_instructions()
-        )
-        self.message_blueprint.system_message = system_message
-
-    def build_ai_and_tool_messages(self, agent_state: "AgentState"):
-        """Build the AI and tool messages."""
-
-        messages = agent_state.messages
-
-        ai_message_index = next(
-            (
-                i
-                for i in range(len(messages) - 1, -1, -1)
-                if isinstance(messages[i], AIMessage)
-            ),
-            None,
-        )
-
-        if ai_message_index is None:
-            logger.warning("No AIMessage found in the agent state messages.")
-            return
-
-        ai_message = messages[ai_message_index]
-
-        tool_messages = [
-            msg
-            for msg in messages[ai_message_index + 1 :]
-            if isinstance(msg, ToolMessage)
-        ]
-
-        self.message_blueprint.ai_message = ai_message
-        self.message_blueprint.tool_messages = tool_messages
-
-    async def build_human_messages(
-        self, agent_context: "AgentContext", agent_state: "AgentState"
-    ):
-        
-        # Memory
-        scratchpad = agent_state.scratchpad
-        self.message_blueprint.scratchpad = scratchpad
-        
-        # Browser State Content
-        try:
-            browser_state: BrowserState = await agent_context.browser_context.get_state(
-                cache_clickable_elements_hashes=True
-            )
-        except Exception as e:
-            logger.error(f"Error gathering browser state: {e}", exc_info=True)
-            raise
-
-        state_content = self.state_representation.get_state_content(
-            browser_state, agent_state
-        )
-
-        if state_content:
-            if "text" in state_content and state_content["text"]:
-                self.message_blueprint.browser_state_text = state_content["text"]
-
-            if "image" in state_content and state_content["image"]:
-                self.message_blueprint.browser_state_image = state_content["image"]
-
-            else:
-                raise ValueError(
-                    "Browser state content must include either 'text' or 'image'."
-                )
-        else:
-            raise ValueError("Browser state content is empty or invalid.")
-
-        # Task
-        self.message_blueprint.task = agent_state.task
-
-        # Dynamic Messages (if any)
-        dynamic_messages = ""
-
-        active_messages = message_registry.get_active_messages(agent_state)
-
-        if active_messages:
-            dynamic_messages += "**Heads-Up:**\n" + "\n".join(active_messages)
-
-        if dynamic_messages:
-            self.message_blueprint.dynamic_messages = dynamic_messages
-
-    async def build_message_blueprint(
+    async def get_context(
         self,
-        agent_context: "AgentContext",
         agent_state: "AgentState",
-    ) -> MessageBlueprint:
+    ) -> list:
 
-        self.build_system_message()
+        contents = []
 
-        self.build_ai_and_tool_messages(agent_state)
+        # System Prompt
+        contents.append(
+            SystemMessage(
+                content=self.SYSTEM_MESSAGE_TEMPLATE.format(
+                    state_instructions=self.state_representation.get_state_instructions()
+                )
+            )
+        )
 
-        await self.build_human_messages(agent_context, agent_state)
+        messages = agent_state.get("messages", [])
 
-        tools = await tool_registry.get_active_tools(agent_context, agent_state)
-        self.message_blueprint.active_tools = tools
+        # Human Message
+        contents.extend([msg for msg in messages if isinstance(msg, HumanMessage)][-2:])
 
-        return self.message_blueprint
+        ## Browser State NOTE: we are passing the browser state as human message.
+        snapshot = agent_state.get("browser_snapshot", {}) or {}
+        snapshot_content = []
+
+        url = snapshot.get("url")
+        if url:
+            snapshot_content.append({"type": "text", "text": url})
+
+        screenshot = snapshot.get("screenshot")
+        if screenshot:
+            snapshot_content.append(
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/jpeg;base64,{screenshot}"},
+                }
+            )
+
+        dom_text = snapshot.get("dom_text")
+        if dom_text:
+            snapshot_content.append({"type": "text", "text": dom_text})
+
+        if snapshot_content:
+            contents.append(HumanMessage(content=snapshot_content))
+
+        ## TODO: Dynamic instructions.
+
+        # AI messages FIXME: exclude the thinking part from the content later.
+        contents.extend([msg for msg in messages if isinstance(msg, AIMessage)][-3:])
+
+        # Tool messages
+        contents.extend([msg for msg in messages if isinstance(msg, ToolMessage)][-3:])
+
+        return contents

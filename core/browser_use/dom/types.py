@@ -199,7 +199,7 @@ class DOMElementNode(DOMBaseNode):
 
     @cached_property
     def hash(self) -> HashedDomElement:
-        from browser_use.dom.history_tree_processor.service import (
+        from .history_tree_processor.service import (
             HistoryTreeProcessor,
         )
 
@@ -520,15 +520,16 @@ class DOMElementNode(DOMBaseNode):
                 # Return the first descriptive attribute found, stripped of whitespace.
                 attribute = self.attributes[attr].strip()
                 return attribute
-            
+
         # 3. As a final fallback, if the element is truly empty of descriptive
         #    attributes and text, use its tag name.
         text = self.get_all_text_till_next_clickable_element().strip()
-        
+
         if text:
             text = " ".join(text.split()[:3])
-        
+
         return text
+
 
 SelectorMap = dict[int, DOMElementNode]
 

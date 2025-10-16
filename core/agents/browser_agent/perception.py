@@ -5,13 +5,13 @@ import json
 from enum import Enum
 from abc import ABC, abstractmethod
 import base64
-from browser_use.dom.types import DOMElementNode
+from core.browser_use.dom.types import DOMElementNode
 import logging
 from core.utils.logging_utils import get_message_builder_logger
 from .utils import BBoxRenderer, save_to_file
 
 if TYPE_CHECKING:
-    from browser_use.types import BrowserState
+    from core.browser_use.types import BrowserState
     from .agent import AgentState
 
 
@@ -115,10 +115,11 @@ class Screenshot(BrowserRepresentation):
             state_text += "[No interactive elements found, looks like the page is loading.]"
 
         bbox_renderer = BBoxRenderer()
-        bboxes_screenshot = bbox_renderer.render_bboxes(base64_screenshot, browser_state.selector_map)
-        # bboxes_screenshot = browser_state.screenshot
+        # bboxes_screenshot = bbox_renderer.render_bboxes(base64_screenshot, browser_state.selector_map)
+        bboxes_screenshot = browser_state.screenshot
         try:
-            step = agent_state.step
+            step = agent_state.get('step', 0)
+            
             save_to_file(
                 "screenshots",
                 f"screenshot.png",
@@ -370,7 +371,7 @@ class MarkdownDOM(BrowserRepresentation):
             "agents/browser_executor/dom",
             f"dom_markdown.md",
             markdown_content.encode("utf-8"),
-            index=agent_state.step,
+            index=agent_state.get('step', 0),
         )
 
         # Add note for the displayed text
@@ -587,7 +588,7 @@ class JsonDOM(BrowserRepresentation):
             "agents/browser_executor/dom",
             f"dom_json.json",
             json_content.encode("utf-8"),
-            index=agent_state.step,
+            index=agent_state.get('step', 0),
         )
 
         # Add note about interactive elements for display
