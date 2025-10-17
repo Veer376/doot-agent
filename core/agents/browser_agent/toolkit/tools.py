@@ -27,7 +27,12 @@ this is how it gonna be.
 2. use the browser_runtime function to get the browser resource.
 3. Now we don't have to return the ToolResult, we can directly return the str or list. (i don't know if dict will work)
 4. for the directly changing the state, like tools updating the field reverse_tools, use the Command() and update the state directly, make sure to accept the InjectToolCallId in that case, update the state, and also include the final ToolMessage.
+5. there is a concern, we have the ToolResult with error field, but in case of ToolNode how it will work,
+a. if we left it and raise, the ToolNode will take it as error and will it fail the execution or transer it to the agent, if it fails then its good. because there is paramter handle_erros, so will be only ahndle the valuerror or all the errors, maybe we can configure that i guess.
+b. we can handle it ourself, using ToolMessage but that will be tedious and we will lose the benefit of ToolNode(). first option needs to be digged in so that we can write the cleaner code.
+so this 5. is something you must dig for. after digging let me know what you found and for now don't make any changes let just think about hte 5th point.
 
+remove this prompt if you have complete making changes to the code.
 """
 
 @tool_registry.register()
