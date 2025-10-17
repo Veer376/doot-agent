@@ -1,12 +1,16 @@
-from typing import Literal
+from typing import Literal, TypedDict, Annotated
+from dataclasses import dataclass
 from langchain_core.messages import (
     SystemMessage,
     AIMessage,
     ToolMessage,
     HumanMessage,
+    BaseMessage,
 )
 from langgraph.graph import START, END, StateGraph
 from langgraph.runtime import Runtime
+from langgraph.prebuilt import ToolNode, tools_condition
+from langgraph.graph.message import add_messages
 
 # Dependency imports
 from core.agents.browser_agent.toolkit.registry import tool_registry
@@ -17,33 +21,37 @@ from core.agents.browser_agent.perception import Screenshot
 from core.agents.llm import LLM, GeminiLLM, LangChainLLM, LLMConfig
 from core.agents.browser_agent.toolkit import ToolResult
 from core.agents.browser_agent.messages.error_messages import ToolCallMissing, InvalidToolCall
-from core.agents.browser_agent.types import AgentState, AgentContext, MessageBlueprint, Snippet, BrowserSnapshot
+from core.agents.browser_agent.state import AgentState, AgentContext, MessageBlueprint, Snippet, BrowserSnapshot
 from core.agents.browser_agent.browser_runtime import get_browser_context
 from core.clients.langgraph_checkpointer import checkpointer
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_google_genai._enums import HarmBlockThreshold, HarmCategory
+from core.agents.llm import LLM, GeminiConfig
 
 logger = get_agent_logger()
 
-model = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
-        temperature=1,
-        max_retries=2,
-        max_output_tokens=None,
-        include_thoughts=True,
-        thinking_budget=-1,
-        # Configure native Gemini tools on model creation
-        tools=[
-            {"google_search_retrieval": {"dynamic_retrieval_config": {"mode": "MODE_DYNAMIC", "dynamic_threshold": 0.3}}}
-        ],
-        safety_settings={
-            HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
-            HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
-            HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-            HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
-            HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY: HarmBlockThreshold.BLOCK_NONE,
-        }
-    )
+
+@dataclass
+class Snippet:
+    type: str
+    message: str
+
+class BrowserSnapshot(TypedDict):
+    url: str | None  # current url
+    screenshot: str | None  # base64 encoded screenshot of current page
+    dom_text: str | None  # text content of the current page
+
+
+class AgentState(TypedDict, total=False):
+    messages: Annotated[list[BaseMessage], add_messages] 
+    step: int
+    reserved_tools: list[str]
+    scratchpad: list[Snippet]
+
+    browser_snapshot: BrowserSnapshot
+
+class AgentContext(TypedDict, total=False):
+    user_id: str | None
+
+
 async def browser_state_updater(
     agent_state: AgentState, runtime: Runtime[AgentContext]
 ):
@@ -80,14 +88,14 @@ async def browser_executor(agent_state: AgentState, runtime: Runtime[AgentContex
     contents = await MessageBuilder().get_context(agent_state)
     tools = tool_registry.get_active_tools(agent_state)
     
-    response = await model.bind_tools(tools).ainvoke(contents)
+    response = await LLM(GeminiConfig(model="gemini-1.5-flash")).bind_tools(tools).ainvoke(contents)
 
     return {
         "messages": [response], 
         "step": agent_state.get('step', 0) + 1
     }
 
-
+tool_node = ToolNode()
 @escalate_error
 async def tool_executor(agent_state: AgentState, runtime: Runtime[AgentContext]):
     """Custom tool node that handles tool execution."""
@@ -150,11 +158,6 @@ async def tool_executor(agent_state: AgentState, runtime: Runtime[AgentContext])
                 )
             )
 
-        if result.status == "error":
-            agent_state.get('consecutive_failures', []).append(result.message)
-        else:
-            agent_state.get('consecutive_failures', []).clear()
-
         reserved_tools.extend(getattr(result, "reserve_tools", []) or [])
 
         tool_results.append(
@@ -171,7 +174,6 @@ async def tool_executor(agent_state: AgentState, runtime: Runtime[AgentContext])
 
     return {
         "messages": tool_results,
-        "last_actions": [tool_result.name for tool_result in tool_results],
         "reserved_tools": reserved_tools,
     }
 
@@ -211,7 +213,7 @@ async def task_summarizer(agent_state: AgentState):
         {"type": "text", "text": f"Last messages: {agent_state.get('messages', [])[-3:]}"},
     ]
 
-    response = await model.ainvoke([system_message, HumanMessage(content=content)])
+    response = await LLM(GeminiConfig(model="gemini-2.5-flash")).ainvoke([system_message, HumanMessage(content=content)])
 
     return {"messages": [response]}
 

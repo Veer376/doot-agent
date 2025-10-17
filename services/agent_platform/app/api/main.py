@@ -5,31 +5,49 @@ import logging
 import time
 import datetime
 import uvicorn
-from .routes.threads import threads
+import asyncio
+import sys
+import os
+from pathlib import Path
+from .routes.runs import runs_router
+from .routes.threads import threads_router
 from .routes.assistants import assistants_router
 from core.utils.logging_config import setup_logging
 from contextlib import asynccontextmanager
 from core.clients import get_supabase, close_supabase, get_redis, close_redis
 from ..graph import load_graphs_from_file, GraphRegistryError
 
+# Ensure asyncio subprocess support on Windows for Playwright by using the Selector policy
+# Must be set at import time before any event loop is created (e.g., before uvicorn starts)
+if sys.platform == "win32" and hasattr(asyncio, "WindowsSelectorEventLoopPolicy"):
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
 logger = logging.getLogger("agent_platform")
+
+# Define the project root where langgraph.json lives
+# In Docker: /orbit-agent (via mount)
+# Can be overridden via ORBIT_AGENT_ROOT environment variable
+PROJECT_ROOT = Path(os.getenv("ORBIT_AGENT_ROOT", "/orbit-agent"))
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # startup logic
     try:
-        graph_count = load_graphs_from_file()
-        logger.info("Graph registry warmed with %d graph(s)", graph_count)
+        load_graphs_from_file(root=PROJECT_ROOT)
+        logger.info("Graph registry warmed with graph(s)")
     except GraphRegistryError as exc:
         logger.error("Failed to initialise graph registry: %s", exc)
         raise
+    except Exception as exc:
+        logger.error("Unexpected error during graph registry init: %s", exc)
+        pass
 
     await get_supabase()
     await get_redis()
-    
+
     yield
-    
+
     # shutdown logic
     await close_supabase()
     await close_redis()
@@ -65,8 +83,7 @@ async def log_requests(request, call_next):
     return response
 
 
-# Health check endpoint
-@app.get("/", response_model=Dict[str, str])
+@app.get("/")
 async def health_check():
     """
     Health check endpoint to verify if the server is running properly
@@ -77,29 +94,17 @@ async def health_check():
         "service": "orbit-agent-api",
     }
 
-
-@app.get("/info")
-async def get_info():
-    """
-    LangGraph SDK compatibility endpoint to get basic API info.
-    """
-    return {
-        "service": "orbit-agent-api",
-        "version": "0.1.0",
-        "langgraph_schema_version": "0.1.0",
-    }
-
-
-app.include_router(threads, prefix="/threads", tags=["threads"])
-app.include_router(assistants_router, prefix="/assistants", tags=["assistants"])
+app.include_router(threads_router)
+app.include_router(assistants_router)
+app.include_router(runs_router)
 
 # Main startup
 if __name__ == "__main__":
-    # When running as a module (python -m app.main), uvicorn should import via the package path
     uvicorn.run(
-        "agent_platform.api.main:app",
+        "agent_platform.app.api.main:app",
         host="0.0.0.0",
         port=5000,
-        reload=True,
+        reload=False if sys.platform == "win32" else True,
         reload_delay=5,
+        loop="asyncio",  # Use asyncio loop instead of uvloop for Windows subprocess support
     )

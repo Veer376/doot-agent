@@ -1,0 +1,112 @@
+# Orchestrator for Orbit Agent services
+# - browser: Playwright WebSocket server (single browser, many contexts)
+# - api: FastAPI agent platform using the core package
+# - redis: cache / queue backend (configure via REDIS_URL)
+#
+# Required env (create services/.env):
+#   SUPABASE_URL=...            # Your Supabase project URL
+#   SUPABASE_ANON_KEY=...       # Or SUPABASE_SERVICE_ROLE_KEY=...
+# Optional env:
+#   PLAYWRIGHT_PORT=3000        # Browser service port
+#   PUBLIC_HOST=browser         # Hostname injected into ws endpoint file
+#   API_PORT=5000               # API external port
+
+services:
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -h 127.0.0.1 -p 6379 ping | grep PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+    networks:
+      - orbit
+
+  browser:
+    build:
+      context: .
+      dockerfile: services/browser/Dockerfile
+    environment:
+      - PLAYWRIGHT_PORT=3500
+      # Set PUBLIC_HOST so the file contains a usable URL from other containers
+      - PUBLIC_HOST=browser
+    ports:
+      - "3500:3500"
+    shm_size: "1gb"
+    healthcheck:
+      # Healthy when the ws endpoint file exists and is non-empty
+      test: ["CMD-SHELL", "test -s ${WS_ENDPOINT_FILE:-/var/run/playwright-ws-endpoint}"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+    networks:
+      - orbit
+
+  # api:
+  #   build:
+  #     context: ..
+  #     dockerfile: services/agent_platform/Dockerfile
+  #   depends_on:
+  #     redis:
+  #       condition: service_healthy
+  #     browser:
+  #       condition: service_healthy
+  #   env_file:
+  #     - ./.env
+  #   environment:
+  #     # Point core Redis client at the redis service
+  #     - REDIS_URL=redis://redis:6379
+  #       # Optional: If your app reads browser ws endpoint from env, set it here.
+  #       # Otherwise pass via request/config.
+  #     - BROWSER_WSS_URL=ws://browser:3500/playwright
+  #     - IN_DOCKER=true
+  #   ports:
+  #     - "5000:5000"
+  #   restart: unless-stopped
+  #   networks:
+  #     - orbit
+
+  # Development variant with hot reload and bind mounts
+  api-dev:
+    build:
+      context: .
+      dockerfile: services/agent_platform/Dockerfile
+    depends_on:
+      redis:
+        condition: service_healthy
+      browser:
+        condition: service_healthy
+    env_file:
+      - ./.env
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - BROWSER_WSS_URL=ws://browser:3500
+      - IN_DOCKER=true
+      - WATCHFILES_FORCE_POLLING=true
+      - ORBIT_AGENT_ROOT=/orbit-agent
+    volumes:
+      - ./services/agent_platform:/agent_platform
+      - ./core:/orbit-agent/core
+      - ./pyproject.toml:/orbit-agent/pyproject.toml:ro
+      - ./langgraph.json:/orbit-agent/langgraph.json:ro
+    command: [
+      "uvicorn", "app.api.main:app",
+      "--host", "0.0.0.0",
+      "--port", "5000",
+      "--reload",
+      "--reload-dir", "/agent_platform",
+      "--reload-dir", "/orbit-agent/core"
+    ]
+    ports:
+      - "5000:5000"
+    restart: unless-stopped
+    networks:
+      - orbit
+
+networks:
+  orbit:
+    driver: bridge
+

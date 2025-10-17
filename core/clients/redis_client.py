@@ -17,16 +17,21 @@ def _build_client() -> redis.Redis:
         )
     
     # NOTE: Avoid hardcoding credentials in source. Prefer REDIS_URL or env vars.
-    return redis.Redis(
-        host='redis-10032.c10.us-east-1-4.ec2.redns.redis-cloud.com',
-        port=10032,
-        decode_responses=True,
-        username="default",
-        password="REMOVED_CREDENTIAL",
-        # ssl=True,  # enable if your Redis requires TLS (e.g., Redis Cloud)
-        # health_check_interval=30,
-        # retry_on_timeout=True,
-    )
+    redis_kwargs = {}
+    
+    if os.getenv("IN_DOCKER", "false").lower() == "true":
+        redis_kwargs['host'] = '127.0.0.1'
+        redis_kwargs['port'] = 6379
+        
+    else:
+        redis_kwargs['host'] = 'redis-10032.c10.us-east-1-4.ec2.redns.redis-cloud.com'
+        redis_kwargs['port'] = 10032
+        redis_kwargs['username'] = 'default'
+        redis_kwargs['password'] = 'REMOVED_CREDENTIAL'
+        
+    redis_kwargs['decode_responses'] = True
+    
+    return redis.Redis(**redis_kwargs)
 
 def get_redis() -> redis.Redis:
     global _client
@@ -44,10 +49,14 @@ async def close_redis():
         _client = None
        
 async def test():
+    import time
+    global _client
     if _client is None:
         _client = _build_client()
+    start = time.time()
     pong = await _client.ping()
     print(f"Ping response: {pong}")
+    print(f"Time took: {time.time()-start} seconds")
     
     
 if __name__ == "__main__":

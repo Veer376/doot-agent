@@ -11,26 +11,36 @@ from .graph import get_graph
 
 logger = logging.getLogger("worker")
 
+
 async def process_run(run: Run):
     """Process a run and stream the results via Redis"""
     # FIXME: validate_run, and handle based on multitask_strategy.
 
     run_id = run["run_id"]
+    assistant_id = run["assistant_id"]
+    if not assistant_id:
+        raise ValueError(f"Run {run_id} does not have an assistant_id")
+
     thread_id = run["thread_id"]
     metadata = run.get("metadata", {})
     multitask_strategy = run.get("multitask_strategy", "enqueue")
     kwargs = run.get("kwargs", {})
-    
+
     # graph: = GRAPHS[run.get("assistant_id", "default")]
-    graph = get_graph("chat_agent")
+    graph = await get_graph(assistant_id)
+    print("Graph ID: ", assistant_id)
 
     webhook = kwargs.get("webhook", None)
-    stream_resumable = kwargs.get("stream_resumable", False) # TODO: Implement stream resumable handling
+    stream_resumable = kwargs.get(
+        "stream_resumable", False
+    )  # TODO: Implement stream resumable handling
     feedback_keys = kwargs.get("feedback_keys", None)
-    
+
     if metadata or feedback_keys or webhook:
-        logger.warning(f"Run {run_id} has metadata {metadata} or feedback_keys {feedback_keys}, but handling not implemented yet")
-        
+        logger.warning(
+            f"Run {run_id} has metadata or feedback_keys, but handling not implemented yet"
+        )
+
     input = kwargs.get("input", None)
     if cmd := kwargs.get("command", None):
         input = map_cmd(cmd)
@@ -59,7 +69,7 @@ async def process_run(run: Run):
             input=input,
             config=config,
             context=kwargs.get("context", {}),
-            stream_mode=kwargs.get("stream_mode", ["messages"]),
+            stream_mode=["messages", "values", "updates"],
             interrupt_after=kwargs.get("interrupt_after", None),
             interrupt_before=kwargs.get("interrupt_before", None),
             durability=kwargs.get("durability", "async"),
@@ -67,6 +77,9 @@ async def process_run(run: Run):
         ):
 
             if stream_mode == "values":
+                # Serialize messages if they exist
+                data = {}
+
                 if messages := chunk.get("messages", None):
                     dict_messages = [
                         (
@@ -76,18 +89,24 @@ async def process_run(run: Run):
                         )
                         for msg in messages
                     ]
+                    data["messages"] = dict_messages
 
-                    await redis_client.publish(
-                        f"run:{run_id}:stream",
-                        json.dumps(
-                            {
-                                "event": "values",
-                                "data": {"messages": dict_messages},
-                                "run_id": run_id,
-                                "thread_id": thread_id,
-                            }
-                        ),
-                    )
+                # Include other state fields (browser_snapshot, etc.)
+                for key, value in chunk.items():
+                    if key != "messages":  # Already handled above
+                        data[key] = value
+
+                await redis_client.publish(
+                    f"run:{run_id}:stream",
+                    json.dumps(
+                        {
+                            "event": "values",
+                            "data": data,
+                            "run_id": run_id,
+                            "thread_id": thread_id,
+                        }
+                    ),
+                )
 
             if stream_mode == "messages":
                 if isinstance(chunk, tuple):
@@ -125,8 +144,9 @@ async def process_run(run: Run):
 
     except Exception as e:
         import traceback
+
         traceback.print_exc()
-        
+        run["status"] = "error"
         await redis_client.publish(
             f"run:{run_id}:stream",
             json.dumps(

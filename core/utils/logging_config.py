@@ -6,6 +6,11 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Suppress gRPC/absl C-core logs (e.g., "ALTS creds ignored...") by setting env vars early.
+os.environ["ABSL_MIN_LOG_LEVEL"] = "3"
+os.environ["GRPC_VERBOSITY"] = "ERROR"
+os.environ["GRPC_TRACE"] = ""
+
 
 def setup_logging(log_level=None):
     # Use provided log_level if specified, otherwise fallback to env var

@@ -15,10 +15,15 @@ import asyncio
 from typing import Annotated
 from langgraph.runtime import get_runtime  # NOTE: consider using the get_runtime()
 from langgraph.types import Command
-from ..types import Snippet
+from ..state import Snippet
 
 logger = get_toolkit_logger("tools")
-
+"""
+Prompt:
+since in the agent.py we are going to use the ToolNode() i wnat you to modify each meticuloulsy. 
+1. Remove the browser_context and use the user_id from the InjectedToolArg("user_id") instead.
+even though the browser_runtime doesn't accept the 
+"""
 
 @tool_registry.register()
 async def type_text(
@@ -36,6 +41,7 @@ async def type_text(
         return ToolResult(
             message=f"Element index {element_index} not found", status="error"
         )
+        graph_id = None
 
     try:
         element_description = element_node.get_description()
@@ -274,7 +280,7 @@ async def wait(
 
 
 @tool_registry.register(
-    is_active=lambda ctx: ctx.last_action in ["scroll"] and ctx.step > 0
+    is_active=lambda ctx: any(last_action in ["scroll"] for last_action in ctx.last_actions) and ctx.step > 0
 )
 async def find(
     text: str,
@@ -987,7 +993,7 @@ async def find_by_selector(
         )
 
 
-@tool_registry.register()
+# @tool_registry.register()
 async def commit(
     type: str,
     message: str,

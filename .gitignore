@@ -29,3 +29,15 @@ tests
 .langgraph_api
 .github/instructions/deepsearch.instructions.md
 langgraph.json
+langgraph_api
+orbit_agent.egg-info
+vertexai_deepseek.py
+core/chat_mode.py
+core/agents/chat_agent.py
+docs/BROWSER_UPDATES_FIX.md
+docs/orbit-agent.md
+docs/WORKER_UPDATES_IMPLEMENTATION.md
+docs/UPDATES_IMPLEMENTATION.md
+docs/ARCHITECTURE_COMPARISON.md
+langgraph_runtime_inmem
+services/DEV_SERVER_GUIDE.md

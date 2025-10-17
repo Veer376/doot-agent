@@ -16,7 +16,7 @@ from core.browser_use.browser import Browser, BrowserConfig
 from core.browser_use.context import BrowserContext, BrowserContextConfig
 
 if TYPE_CHECKING:  # pragma: no cover
-    from .types import AgentContext
+    from .state import AgentContext
 
 
 _active_browser: Optional[Browser] = None

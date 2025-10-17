@@ -2,12 +2,12 @@ from fastapi import APIRouter, Body
 from typing import Optional, Dict, Any, List
 from pydantic import BaseModel, Field
 from ...schema import AssistantSearchRequest, Assistant
-from ...default_assistants import default_assistants
+from core.default_assistants import default_assistants
 from ...graph import get_graph
 from ...utils import state_jsonschema, get_configurable_jsonschema
 
 
-assistants_router = APIRouter()
+assistants_router = APIRouter(prefix="/assistants")
 
 
 class AssistantSearch(BaseModel):
@@ -30,12 +30,11 @@ async def search_assistants(
     body: AssistantSearchRequest = Body(...),
 ):
     """Search for assistants. This endpoint also functions as the endpoint to list all assistants."""
-    
-    print(f"Assistant.search.body: {body}")
-    
-    assistants: list[Assistant] = list(default_assistants.values())
-    
-    # search the user's assistants in database
+    try:
+        assistants: list[Assistant] = [Assistant(**assistant_dict) for assistant_dict in default_assistants]
+    except Exception as e:
+        print(f"Error loading default assistants: {e}")
+        assistants = []
 
     return assistants
 
@@ -61,8 +60,8 @@ async def get_assistant_schemas(
     assistant_id: str,
 ):
     graph_id = default_assistants.get(assistant_id).graph_id
-    graph = get_graph(graph_id)
-    
+    graph = await get_graph(graph_id)
+        
     return {
         "graph_id": graph_id,
         "input_schema": graph.get_input_jsonschema(),

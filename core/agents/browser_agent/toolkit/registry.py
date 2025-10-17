@@ -5,6 +5,7 @@ from typing import Any, Callable, TYPE_CHECKING
 from pydantic import BaseModel, create_model
 from core.utils.logging_utils import get_agent_logger
 from .types import FilterContext
+from langchain_core.messages import AIMessage
 
 # Use forward references
 if TYPE_CHECKING:
@@ -53,17 +54,17 @@ class ToolRegistry:
         """Builds a context from the current states and returns a list of active tools."""
         
         browser_snapshot: BrowserSnapshot = agent_state.get("browser_snapshot", {}) or {}
-
         raw_url = browser_snapshot.get("url", "")
-        domain = urlparse(raw_url or "").hostname if raw_url else None
-
-        if not domain:
-            domain = "about:blank"
-
+        domain = urlparse(raw_url or "").hostname if raw_url else "about:blank"
+        last_ai_message = next(
+            (msg for msg in reversed(agent_state.get('messages', [])) if isinstance(msg, AIMessage)),
+            None
+        )
+        
         context = FilterContext(
             domain=domain,
             step=agent_state.get('step', 0),
-            last_action=agent_state.get('last_actions', [])[-1] if agent_state.get('last_actions', []) else None,
+            last_actions=[tool.get('name', '') for tool in last_ai_message.tool_calls] if last_ai_message else [],
             reserved_tools=agent_state.get('reserved_tools', [])
         )
 

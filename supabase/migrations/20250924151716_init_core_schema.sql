@@ -72,8 +72,8 @@ exception when duplicate_object then null; end $$;
 -- ------------------------------------------------------------
 -- JSONB: PostgreSQL's binary JSON. Great for flexible config/metadata.
 -- We CHECK that config is always an object.
-create table if not exists public.assistants (
-  assistant_id uuid primary key default gen_random_uuid(),  -- required
+create table if not exists public.agents (
+  agent_id uuid primary key default gen_random_uuid(),  -- required
   user_id uuid not null references auth.users(id) on delete cascade,
 
   graph_id text not null,                                   -- required
@@ -88,27 +88,27 @@ create table if not exists public.assistants (
   version int
 );
 
-create index if not exists idx_user on public.assistants(user_id);
-create index if not exists idx_assistants_graph on public.assistants(graph_id);
-create index if not exists idx_assistants_updated_at on public.assistants(updated_at desc);
+create index if not exists idx_user on public.agents(user_id);
+create index if not exists idx_agents_graph on public.agents(graph_id);
+create index if not exists idx_agents_updated_at on public.agents(updated_at desc);
 
--- Keep assistants.updated_at current
-create or replace function public._touch_assistant_updated_at() returns trigger as $$
+-- Keep agents.updated_at current
+create or replace function public._touch_agent_updated_at() returns trigger as $$
 begin
   new.updated_at = now();
   return new;
 end; $$ language plpgsql;
 
-drop trigger if exists trg_touch_assistant_updated_at on public.assistants;
-create trigger trg_touch_assistant_updated_at
-before update on public.assistants
-for each row execute function public._touch_assistant_updated_at();
+drop trigger if exists trg_touch_agent_updated_at on public.agents;
+create trigger trg_touch_agent_updated_at
+before update on public.agents
+for each row execute function public._touch_agent_updated_at();
 
--- RLS: only owner can read/write assistants
-alter table public.assistants enable row level security;
+-- RLS: only owner can read/write agents
+alter table public.agents enable row level security;
 
 do $$ begin
-  create policy assistants_owner_all on public.assistants
+  create policy agents_owner_all on public.agents
     for all using (user_id = auth.uid())
     with check (user_id = auth.uid());
 exception when duplicate_object then null; end $$;
@@ -133,7 +133,7 @@ create table if not exists public.threads (
   values jsonb,                                              -- optional
 
   -- optional convenience pointer (not part of SDK response)
-  assistant_id uuid references public.assistants(assistant_id) on delete set null,
+  agent_id uuid references public.agents(agent_id) on delete set null,
 
   -- Validate JSON shapes only when present
   constraint chk_threads_interrupts_is_object
@@ -144,7 +144,7 @@ create table if not exists public.threads (
 
 create index if not exists idx_threads_user_updated on public.threads(user_id, updated_at desc);
 create index if not exists idx_threads_status on public.threads(status);
-create index if not exists idx_threads_assistant on public.threads(assistant_id);
+create index if not exists idx_threads_agent on public.threads(agent_id);
 
 -- Keep threads.updated_at current
 create or replace function public._touch_thread_updated_at() returns trigger as $$

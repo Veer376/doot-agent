@@ -638,6 +638,19 @@ wheels = [
 ]
 
 [[package]]
+name = "langgraph-supervisor"
+version = "0.0.29"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "langchain-core" },
+    { name = "langgraph" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/78/f0/fc8d5b5926caf3becfc75ff399c4b855daaff957f804973942457864ce94/langgraph_supervisor-0.0.29.tar.gz", hash = "sha256:0ab6e06e102096071d605268a4138084b87128f0c965e1544f77a7d4f65ca16b", size = 21095, upload-time = "2025-07-28T14:16:23.079Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/61/15/e3b4ad69b2a5fd6ba3d92bcca92b59ebd3a40f2a55751946728506ba618e/langgraph_supervisor-0.0.29-py3-none-any.whl", hash = "sha256:611dd4545f566f690d30004af3742887ec78134921118706ae7eeb12ce77763d", size = 16039, upload-time = "2025-07-28T14:16:22.259Z" },
+]
+
+[[package]]
 name = "langsmith"
 version = "0.4.31"
 source = { registry = "https://pypi.org/simple" }
@@ -775,6 +788,7 @@ dependencies = [
     { name = "dotenv" },
     { name = "fastapi" },
     { name = "google-genai" },
+    { name = "httpx" },
     { name = "langchain" },
     { name = "langchain-google-genai" },
     { name = "langgraph" },
@@ -782,6 +796,8 @@ dependencies = [
     { name = "langgraph-checkpoint-postgres" },
     { name = "langgraph-prebuilt" },
     { name = "langgraph-sdk" },
+    { name = "langgraph-supervisor" },
+    { name = "orjson" },
     { name = "pillow" },
     { name = "playwright" },
     { name = "psutil" },
@@ -806,6 +822,7 @@ requires-dist = [
     { name = "dotenv", specifier = ">=0.9.9" },
     { name = "fastapi", specifier = ">=0.116.1" },
     { name = "google-genai", specifier = ">=1.29.0" },
+    { name = "httpx", specifier = ">=0.25.0" },
     { name = "langchain", specifier = ">=0.3.27" },
     { name = "langchain-google-genai", specifier = ">=2.1.9" },
     { name = "langgraph", specifier = ">=0.6.4" },
@@ -813,6 +830,8 @@ requires-dist = [
     { name = "langgraph-checkpoint-postgres", specifier = ">=2.0.23" },
     { name = "langgraph-prebuilt", specifier = ">=0.6.4" },
     { name = "langgraph-sdk", specifier = ">=0.2.9" },
+    { name = "langgraph-supervisor", specifier = ">=0.0.29" },
+    { name = "orjson", specifier = ">=3.11.3" },
     { name = "pillow", specifier = ">=11.3.0" },
     { name = "playwright", specifier = ">=1.54.0" },
     { name = "psutil", specifier = ">=7.0.0" },
