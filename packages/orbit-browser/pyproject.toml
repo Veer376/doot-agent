@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "orbit-browser"
+version = "0.1.0"
+description = "Playwright browser server for Orbit Agent"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "playwright>=1.54.0",
+    "fastapi>=0.116.1",
+    "uvicorn>=0.35.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["browser*"]

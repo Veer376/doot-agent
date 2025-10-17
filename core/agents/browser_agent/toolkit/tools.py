@@ -22,7 +22,11 @@ logger = get_toolkit_logger("tools")
 Prompt:
 since in the agent.py we are going to use the ToolNode() i wnat you to modify each meticuloulsy. 
 1. Remove the browser_context and use the user_id from the InjectedToolArg("user_id") instead.
-even though the browser_runtime doesn't accept the 
+even though the browser_runtime doesn't accept the user_id and release the per user resource but 
+this is how it gonna be. 
+2. use the browser_runtime function to get the browser resource.
+3. Now we don't have to return the ToolResult, we can directly return the str or list. (i don't know if dict will work)
+4. for the directly changing the state, 
 """
 
 @tool_registry.register()

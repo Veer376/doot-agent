@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "orbit-api"
+version = "0.1.0"
+description = "FastAPI service for Orbit Agent platform"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "orbit-core",
+    "fastapi>=0.116.1",
+    "uvicorn>=0.35.0",
+    "langgraph-checkpoint-postgres>=2.0.23",
+    "psycopg[binary]>=3.2.10",
+    "dotenv>=0.9.9",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["agent_platform*"]

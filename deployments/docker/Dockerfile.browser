@@ -1,0 +1,17 @@
+FROM mcr.microsoft.com/playwright/python:v1.54.0-jammy
+
+WORKDIR /app
+
+# Copy orbit-browser
+COPY packages/orbit-browser /app/packages/orbit-browser
+WORKDIR /app/packages/orbit-browser
+RUN pip install -e .
+
+# Set working directory
+WORKDIR /app/packages/orbit-browser
+
+# Expose port
+EXPOSE 3500
+
+# Run the browser server
+CMD ["python", "browser/server.py"]
