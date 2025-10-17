@@ -26,7 +26,8 @@ even though the browser_runtime doesn't accept the user_id and release the per u
 this is how it gonna be. 
 2. use the browser_runtime function to get the browser resource.
 3. Now we don't have to return the ToolResult, we can directly return the str or list. (i don't know if dict will work)
-4. for the directly changing the state, 
+4. for the directly changing the state, like tools updating the field reverse_tools, use the Command() and update the state directly, make sure to accept the InjectToolCallId in that case, update the state, and also include the final ToolMessage.
+
 """
 
 @tool_registry.register()
