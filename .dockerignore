@@ -1,0 +1,93 @@
+# Docker ignore for Orbit Agent monorepo
+# This applies to all services built from the root context
+
+# Node.js artifacts (if any)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+
+# Git
+.git/
+.gitignore
+
+# Docker files (avoid copying into images)
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Documentation and assets (if not needed in build)
+README.md
+*.md
+docs/
+
+# Test files (if not needed in production builds)
+tests/
+*_test.py
+conftest.py
+
+# Local config
+.env
+.env.local
+.env.*.local
+
+# Cache directories
+.cache/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Jupyter notebooks (if any)
+.ipynb_checkpoints/
+
+# Browser snapshots and data (generated at runtime)
+screenshots/
+doms/

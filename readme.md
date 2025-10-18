@@ -20,7 +20,9 @@ orbit-agent/
 ## Packages
 
 ### orbit-core
+
 Core library containing:
+
 - Browser agent implementation (LangGraph)
 - Browser automation utilities (Playwright)
 - Clients (Redis, Supabase, LangGraph checkpointer/store)
@@ -29,7 +31,9 @@ Core library containing:
 See [packages/orbit-core/README.md](packages/orbit-core/README.md) for details.
 
 ### orbit-api
+
 FastAPI service providing:
+
 - RESTful API for threads, runs, and assistants
 - Graph registry and LangGraph integration
 - Authentication and storage via Supabase
@@ -38,7 +42,9 @@ FastAPI service providing:
 See [packages/orbit-api/README.md](packages/orbit-api/README.md) for details.
 
 ### orbit-browser
+
 Standalone Playwright browser server:
+
 - Persistent browser with WebSocket API
 - Shared by multiple agent contexts
 - Health monitoring
@@ -48,6 +54,7 @@ See [packages/orbit-browser/README.md](packages/orbit-browser/README.md) for det
 ## Quick Start
 
 ### Prerequisites
+
 - Python 3.13+
 - Docker and Docker Compose
 - Supabase account
@@ -55,12 +62,14 @@ See [packages/orbit-browser/README.md](packages/orbit-browser/README.md) for det
 ### Setup
 
 1. Clone the repository:
+
 ```bash
 git clone <repo-url>
 cd orbit-agent
 ```
 
 2. Create `.env` file at project root:
+
 ```bash
 SUPABASE_URL=your_supabase_url
 SUPABASE_ANON_KEY=your_supabase_key
@@ -69,12 +78,14 @@ BROWSER_WSS_URL=ws://browser:3500
 ```
 
 3. Start services with Docker Compose:
+
 ```bash
 cd deployments/docker
 docker compose --profile dev up
 ```
 
 This will start:
+
 - Redis (port 6379)
 - Browser server (port 3500)
 - API server (port 5000) with hot reload
@@ -82,6 +93,7 @@ This will start:
 ### Development
 
 #### Install packages locally:
+
 ```bash
 # Install orbit-core
 cd packages/orbit-core
@@ -97,6 +109,7 @@ pip install -e .
 ```
 
 #### Run tests:
+
 ```bash
 pytest tests/
 ```
@@ -110,6 +123,7 @@ The project follows a clean monorepo structure:
 3. **orbit-browser**: Standalone service with minimal dependencies
 
 This separation ensures:
+
 - Testable components
 - Reusable core library
 - Independent service deployment
@@ -130,4 +144,3 @@ See [docs/ARCHITECTURE_ANALYSIS.md](docs/ARCHITECTURE_ANALYSIS.md) for detailed 
 ## Contributing
 
 [Add contributing guidelines here]
-

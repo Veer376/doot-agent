@@ -75,11 +75,13 @@ orbit-agent/                          # Repository root
 **Three packages exist:**
 
 1. **`orbit-agent`** (root `pyproject.toml`)
+
    - Namespace: `core.*`
    - Purpose: Core library, agents, tools, clients
    - Dependencies: All agent deps (FastAPI, Playwright, LangChain, etc.)
 
 2. **`agent-platform`** (`services/agent_platform/pyproject.toml`)
+
    - Namespace: `app.*`
    - Purpose: FastAPI REST API
    - Dependencies: Minimal (FastAPI, uvicorn, watchfiles)
@@ -140,10 +142,12 @@ orbit-agent/                          # Repository root
 ### 2.1 Circular Dependency (Critical)
 
 **Evidence:**
+
 - `core/default_assistants.py` imports `from services.agent_platform.app.schema import Assistant`
 - `services/agent_platform/app/api/routes/assistants.py` imports `from core.default_assistants import default_assistants`
 
 **Why it's problematic:**
+
 - Creates tight coupling between library and service
 - Makes it impossible to use `core` in other contexts without the service
 - Violates the "acyclic dependencies principle"
@@ -158,6 +162,7 @@ orbit-agent/                          # Repository root
 **Problem**: `core/default_assistants.py` contains **application-level configuration**, not library code.
 
 **Evidence:**
+
 ```python
 # core/default_assistants.py
 default_assistants = [
@@ -172,6 +177,7 @@ default_assistants = [
 ```
 
 **Why it's wrong:**
+
 - Default assistants are **deployment configuration**, not core functionality
 - Should live in the service layer (`services/agent_platform/app/config/`)
 - `core` should only contain reusable library code (agents, tools, clients)
@@ -181,11 +187,13 @@ default_assistants = [
 ### 2.3 Fragmented Configuration Files
 
 **Current state:**
+
 - `langgraph.json` at repository root
 - `langgraph-platform.yaml` in `services/agent_platform/` (unused)
 - `.env` files in multiple locations
 
 **Problems:**
+
 - Docker mounts require manual mapping of config files
 - Hard to understand which config applies where
 - `langgraph.json` references code in `core/` but lives at root
@@ -196,15 +204,17 @@ default_assistants = [
 ### 2.4 Docker Mount Complexity
 
 **Current Docker mounts (dev):**
+
 ```yaml
 volumes:
   - ./services/agent_platform:/agent_platform
   - ./core:/orbit-agent/core
   - ./pyproject.toml:/orbit-agent/pyproject.toml:ro
-  - ./langgraph.json:/orbit-agent/langgraph.json:ro  # Added to fix path issues
+  - ./langgraph.json:/orbit-agent/langgraph.json:ro # Added to fix path issues
 ```
 
 **Problems:**
+
 - Two separate install locations (`/orbit-agent` and `/agent_platform`)
 - Requires `PYTHONPATH="/orbit-agent:/agent_platform"`
 - Complex parent path traversal (`Path(__file__).resolve().parents[N]`)
@@ -215,6 +225,7 @@ volumes:
 ### 2.5 Monolithic Dependency Tree
 
 **Current `orbit-agent` package depends on:**
+
 - FastAPI (only needed by service)
 - Uvicorn (only needed by service)
 - Playwright (only needed by browser service and browser_agent)
@@ -224,6 +235,7 @@ volumes:
 - etc.
 
 **Problems:**
+
 - Installing `core` pulls in ALL dependencies, even if you only need one agent
 - Impossible to use `core.agents.llm` without installing Playwright
 - Violates "principle of least privilege" for dependencies
@@ -233,6 +245,7 @@ volumes:
 ### 2.6 Schema Duplication Risk
 
 **`services/agent_platform/app/schema.py`** defines:
+
 ```python
 @dataclass
 class Assistant:
@@ -243,6 +256,7 @@ class Assistant:
 ```
 
 **But this is a domain model that:**
+
 - Should be shared if `core` references it
 - Currently causes circular import
 - Will diverge if duplicated in both places
@@ -254,11 +268,13 @@ class Assistant:
 ### 3.1 Python Packaging Standards (PEP 517/518/621)
 
 **Relevant PEPs:**
+
 - **PEP 517/518**: Modern build system (pyproject.toml-based)
 - **PEP 621**: Standard project metadata in pyproject.toml
 - **PEP 420**: Implicit namespace packages
 
 **Key principles:**
+
 1. **One package = one pyproject.toml**
 2. **Dependencies should flow one direction** (service → core, never core → service)
 3. **Namespace packages** can share a common namespace (e.g., `orbit.core`, `orbit.api`)
@@ -268,11 +284,13 @@ class Assistant:
 ### 3.2 Monorepo Patterns
 
 **Industry examples:**
+
 - Google (Bazel-based monorepo)
 - Meta (Buck/Buck2)
 - Python: Poetry workspaces, PDM multi-project, uv workspaces
 
 **Best practices for Python monorepos:**
+
 ```
 monorepo/
 ├── pyproject.toml              # Workspace root (optional)
@@ -288,6 +306,7 @@ monorepo/
 ```
 
 **Dependency direction:**
+
 ```
 api → core
 workers → core
@@ -299,11 +318,13 @@ core → (external deps only)
 ### 3.3 LangGraph Deployment Patterns
 
 **From LangGraph docs:**
+
 1. **langgraph.json** should live at deployment root
 2. **Graphs** should be importable Python modules
 3. **Checkpointers/Stores** initialized at runtime via dependency injection
 
 **Standard structure:**
+
 ```
 app/
 ├── langgraph.json
@@ -319,11 +340,13 @@ app/
 ### 3.4 Microservice Boundaries
 
 **Clean separation:**
+
 - **Library**: Reusable code (tools, agents, clients)
 - **Service**: HTTP API, graph registry, routing
 - **Deployment**: Docker, env config, orchestration
 
 **Anti-patterns to avoid:**
+
 - Service code in library
 - Library importing from service
 - Shared mutable state across boundaries
@@ -468,16 +491,16 @@ dependencies = [
     "langgraph>=0.6.4",
     "langgraph-checkpoint>=2.1.1",
     "langgraph-checkpoint-postgres>=2.0.23",
-    
+
     # LLM providers
     "google-genai>=1.29.0",
     "langchain-google-genai>=2.1.9",
-    
+
     # Infrastructure clients
     "supabase>=2.18.1",
     "redis>=6.4.0",
     "psycopg[binary]>=3.2.10",
-    
+
     # Utilities
     "pydantic>=2.11.7",
     "httpx>=0.25.0",
@@ -523,7 +546,7 @@ dependencies = [
     "fastapi>=0.116.1",
     "uvicorn>=0.35.0",
     "watchfiles>=0.21.0",
-    
+
     # Core library (local editable install in dev, package ref in prod)
     "orbit-core @ file:///${PROJECT_ROOT}/packages/orbit-core",
 ]
@@ -635,17 +658,22 @@ services:
       # Mount source code for hot reload
       - ../../packages/orbit-api/orbit_api:/app/orbit_api
       - ../../packages/orbit-core/orbit_core:/usr/local/lib/python3.13/site-packages/orbit_core
-    command: [
-      "uvicorn", "orbit_api.api.main:app",
-      "--host", "0.0.0.0",
-      "--port", "5000",
-      "--reload"
-    ]
+    command:
+      [
+        "uvicorn",
+        "orbit_api.api.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "5000",
+        "--reload",
+      ]
     environment:
       - WATCHFILES_FORCE_POLLING=true
 ```
 
 **Usage:**
+
 ```bash
 # Production
 docker compose -f deployments/docker/docker-compose.yaml up
@@ -660,6 +688,7 @@ docker compose -f deployments/docker/docker-compose.yaml \
 ### 4.6 Import Pattern Changes
 
 #### Before (problematic):
+
 ```python
 # services/agent_platform/app/api/routes/assistants.py
 from core.default_assistants import default_assistants  # ❌ Library importing config
@@ -667,6 +696,7 @@ from ...schema import Assistant  # ❌ Relative imports across packages
 ```
 
 #### After (clean):
+
 ```python
 # packages/orbit-api/orbit_api/api/routes/assistants.py
 from orbit_api.config.default_assistants import default_assistants  # ✅ Local config
@@ -679,11 +709,13 @@ from orbit_core.agents import browser_agent  # ✅ Library import
 ### 4.7 Configuration Management
 
 #### Before:
+
 - `langgraph.json` at repo root
 - Hard-coded paths with `Path(__file__).parents[N]`
 - Environment variable workarounds
 
 #### After:
+
 ```python
 # packages/orbit-api/orbit_api/graph/registry.py
 from pathlib import Path
@@ -695,7 +727,7 @@ def load_graphs():
     """Load graphs from the service's langgraph.json"""
     if not CONFIG_PATH.exists():
         raise FileNotFoundError(f"langgraph.json not found at {CONFIG_PATH}")
-    
+
     # Load and register graphs...
 ```
 
@@ -710,6 +742,7 @@ def load_graphs():
 **Goal**: Set up new structure alongside old one.
 
 1. **Create new directory structure**:
+
    ```bash
    mkdir -p packages/orbit-core/orbit_core
    mkdir -p packages/orbit-api/orbit_api
@@ -730,17 +763,20 @@ def load_graphs():
 **Goal**: Relocate `core/` → `packages/orbit-core/orbit_core/`
 
 1. **Move core code**:
+
    ```bash
    git mv core packages/orbit-core/orbit_core
    ```
 
 2. **Update imports in core** (automated with tool):
+
    ```bash
    # Find/replace:
    from core. → from orbit_core.
    ```
 
 3. **Create new pyproject.toml**:
+
    - Copy content from section 4.4
    - Place at `packages/orbit-core/pyproject.toml`
 
@@ -760,23 +796,27 @@ def load_graphs():
 **Goal**: Relocate `services/agent_platform/` → `packages/orbit-api/`
 
 1. **Move service code**:
+
    ```bash
    git mv services/agent_platform/app packages/orbit-api/orbit_api
    ```
 
 2. **Create config module**:
+
    ```bash
    mkdir packages/orbit-api/orbit_api/config
    # Move default_assistants.py here
    ```
 
 3. **Create models module**:
+
    ```bash
    mkdir packages/orbit-api/orbit_api/models
    # Move schema.py content here, rename to assistant.py
    ```
 
 4. **Update imports in API** (automated):
+
    ```bash
    # Find/replace:
    from core. → from orbit_core.
@@ -784,6 +824,7 @@ def load_graphs():
    ```
 
 5. **Move langgraph.json**:
+
    ```bash
    mv langgraph.json packages/orbit-api/
    ```
@@ -803,19 +844,23 @@ def load_graphs():
 ### Phase 4: Update Docker Configuration
 
 1. **Create new Dockerfile**:
+
    - Use template from section 4.5
    - Place at `packages/orbit-api/Dockerfile`
 
 2. **Move docker-compose.yaml**:
+
    ```bash
    mv docker-compose.yaml deployments/docker/
    ```
 
 3. **Update docker-compose paths**:
+
    - `context: ../../`
    - `dockerfile: packages/orbit-api/Dockerfile`
 
 4. **Create dev override**:
+
    - Use template from section 4.5
    - Place at `deployments/docker/docker-compose.dev.yaml`
 
@@ -831,12 +876,14 @@ def load_graphs():
 ### Phase 5: Update Tests & Documentation
 
 1. **Update test imports**:
+
    ```bash
    # Find/replace in tests/:
    from core. → from orbit_core.
    ```
 
 2. **Update documentation**:
+
    - README.md (new structure diagram)
    - CONTRIBUTING.md (new dev setup)
    - ARCHITECTURE.md (this document)
@@ -851,6 +898,7 @@ def load_graphs():
 ### Phase 6: Cleanup
 
 1. **Remove old directories**:
+
    ```bash
    git rm -r core/
    git rm -r services/agent_platform/
@@ -858,6 +906,7 @@ def load_graphs():
    ```
 
 2. **Update root pyproject.toml** (if keeping workspace root):
+
    ```toml
    [tool.workspace]
    members = ["packages/orbit-core", "packages/orbit-api"]
@@ -916,6 +965,7 @@ def load_graphs():
 ### Risk 1: Breaking Existing Imports
 
 **Mitigation**:
+
 - Use automated refactoring tools (`sed`, `ruff`, IDE refactoring)
 - Implement in feature branch with comprehensive tests
 - Create import compatibility shims during transition
@@ -923,6 +973,7 @@ def load_graphs():
 ### Risk 2: Docker Build Failures
 
 **Mitigation**:
+
 - Test each Dockerfile change incrementally
 - Keep old compose file until new one verified
 - Use multi-stage builds for rollback capability
@@ -930,6 +981,7 @@ def load_graphs():
 ### Risk 3: Deployment Disruption
 
 **Mitigation**:
+
 - Blue-green deployment strategy
 - Keep old structure in separate branch
 - Gradual rollout to staging → production
@@ -937,6 +989,7 @@ def load_graphs():
 ### Risk 4: Developer Onboarding Confusion
 
 **Mitigation**:
+
 - Update all documentation before merge
 - Record video walkthrough of new structure
 - Create migration guide for contributors
@@ -970,6 +1023,7 @@ def load_graphs():
 ### Summary
 
 The current architecture has **grown organically** and suffers from:
+
 1. Circular dependencies between library and service
 2. Configuration scattered across multiple locations
 3. Complex Docker mount configurations
@@ -980,6 +1034,7 @@ The current architecture has **grown organically** and suffers from:
 **Proceed with the proposed restructuring** (Part 4: Target Architecture).
 
 **Rationale**:
+
 - Aligns with Python packaging best practices
 - Eliminates circular dependencies
 - Simplifies Docker configuration
@@ -1003,20 +1058,24 @@ The current architecture has **grown organically** and suffers from:
 ### Current Dependencies by Layer
 
 **orbit-agent (core)**:
+
 - 40+ dependencies (everything)
 - Mix of library and service deps
 
 **agent-platform (service)**:
+
 - 3 explicit deps
 - Implicit dependency on all of orbit-agent
 
 ### Target Dependencies by Layer
 
 **orbit-core**:
+
 - ~25 core library deps
 - Optional dependency groups for specialized features
 
 **orbit-api**:
+
 - ~3 service deps
 - 1 local dependency (`orbit-core`)
 

@@ -31,6 +31,7 @@ tests
 langgraph.json
 langgraph_api
 orbit_agent.egg-info
+orbit_core.egg-info
 vertexai_deepseek.py
 core/chat_mode.py
 core/agents/chat_agent.py
@@ -41,3 +42,4 @@ docs/UPDATES_IMPLEMENTATION.md
 docs/ARCHITECTURE_COMPARISON.md
 langgraph_runtime_inmem
 services/DEV_SERVER_GUIDE.md
+test_browser_ws.py
