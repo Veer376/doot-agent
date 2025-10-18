@@ -22,7 +22,7 @@ from orbit_core.agents.browser_agent.perception import Screenshot
 from orbit_core.agents.llms import LLM, GeminiConfig
 from orbit_core.agents.browser_agent.state import AgentState, AgentContext, Snippet, BrowserSnapshot
 from orbit_core.agents.browser_agent.browser_runtime import get_browser_context
-from orbit_core.clients.langgraph_checkpointer import checkpointer
+from orbit_core.clients.checkpointer import get_checkpointer
 from orbit_core.agents.llms import LLM, GeminiConfig
 
 logger = get_agent_logger()
@@ -109,5 +109,5 @@ graph = (
         {"tools": "tools", "__end__": "task_summarizer"},
     )
     .add_edge("task_summarizer", END)
-    .compile(checkpointer=checkpointer)
+    .compile(checkpointer=get_checkpointer())
 )

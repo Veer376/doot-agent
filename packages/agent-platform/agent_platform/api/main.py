@@ -15,6 +15,7 @@ from .routes.assistants import assistants_router
 from orbit_core.utils.logging_config import setup_logging
 from contextlib import asynccontextmanager
 from orbit_core.clients import get_supabase, close_supabase, get_redis, close_redis
+from orbit_core.clients.checkpointer import setup_checkpointer, close_checkpointer
 from ..graph import load_graphs_from_file, GraphRegistryError
 
 # Ensure asyncio subprocess support on Windows for Playwright by using the Selector policy
@@ -32,7 +33,12 @@ PROJECT_ROOT = Path(os.getenv("ORBIT_AGENT_ROOT", "/orbit-agent"))
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # startup logic
+    # startup logic - initialize clients first
+    await get_supabase()
+    await get_redis()
+    await setup_checkpointer()
+    
+    # Then load graphs (which depend on checkpointer being initialized)
     try:
         load_graphs_from_file(root=PROJECT_ROOT)
         logger.info("Graph registry warmed with graph(s)")
@@ -43,12 +49,10 @@ async def lifespan(app: FastAPI):
         logger.error("Unexpected error during graph registry init: %s", exc)
         pass
 
-    await get_supabase()
-    await get_redis()
-
     yield
 
     # shutdown logic
+    await close_checkpointer()
     await close_supabase()
     await close_redis()
 

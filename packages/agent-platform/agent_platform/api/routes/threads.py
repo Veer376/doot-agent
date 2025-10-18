@@ -23,7 +23,8 @@ from ...schema import (
 )
 from langgraph.graph import START, END, StateGraph, MessagesState
 import pprint
-from orbit_core.clients import get_supabase, checkpointer
+from orbit_core.clients import get_supabase
+from orbit_core.clients.checkpointer import get_checkpointer
 from ..utils import authenticate_user
 
 logger = logging.getLogger("threads")
@@ -174,7 +175,7 @@ async def get_thread_history_post(
     Minimal graph seems the easiest solution for future also. 'll see."""
 
     try:
-        graph = StateGraph(MessagesState).add_edge(START, END).compile(checkpointer=checkpointer)
+        graph = StateGraph(MessagesState).add_edge(START, END).compile(checkpointer=get_checkpointer())
         states = [
             state_snapshot_to_thread_state(
                 state

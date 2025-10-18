@@ -11,6 +11,25 @@ services:
     networks:
       - orbit
 
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_DB=orbit_agent
+      - POSTGRES_USER=orbit
+      - POSTGRES_PASSWORD=orbit_dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U orbit -d orbit_agent"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+    networks:
+      - orbit
+
   browser:
     build:
       context: .
@@ -38,12 +57,15 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
       browser:
         condition: service_healthy
     env_file:
       - ./.env
     environment:
       - REDIS_URL=redis://redis:6379
+      - POSTGRES_URL=postgresql://orbit:orbit_dev_password@postgres:5432/orbit_agent
       - BROWSER_WSS_URL=ws://browser:3500/
       - IN_DOCKER=true
       - WATCHFILES_FORCE_POLLING=true
@@ -64,3 +86,6 @@ services:
 networks:
   orbit:
     driver: bridge
+
+volumes:
+  postgres_data:

@@ -3,7 +3,7 @@ from langgraph.graph import START, END, StateGraph
 from langgraph.graph.message import add_messages
 from typing import TypedDict, Annotated
 from langchain.chat_models import init_chat_model
-from orbit_core.clients.langgraph_checkpointer import checkpointer
+from orbit_core.clients.checkpointer import get_checkpointer
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_google_vertexai import ChatVertexAI
 from langchain_google_genai._enums import HarmBlockThreshold, HarmCategory
@@ -123,5 +123,5 @@ graph = (
     .add_node(model_node)
     .add_edge(START, "model_node")
     .add_edge("model_node", END)
-    .compile(checkpointer=checkpointer)
+    .compile(checkpointer=get_checkpointer())
 )

@@ -24,7 +24,8 @@ from itertools import filterfalse
 import inspect
 import glob
 import asyncio
-from orbit_core.clients import checkpointer, store
+from orbit_core.clients import store
+from orbit_core.clients.checkpointer import get_checkpointer
 
 logger = logging.getLogger("graph_registry")
 
@@ -193,11 +194,15 @@ async def get_graph(
     graph_id: str,
     config: Config = {"configurable": {}},
     *,
-    checkpointer: BaseCheckpointSaver = checkpointer,
+    checkpointer: BaseCheckpointSaver = None,
     store: BaseStore = store,
 ) -> Pregel:
     """Return the runnable."""
     # from langgraph_api.utils import config as lg_config
+    
+    # Use provided checkpointer or get the singleton
+    if checkpointer is None:
+        checkpointer = get_checkpointer()
 
     if graph_id not in GRAPHS:
         raise Exception(
