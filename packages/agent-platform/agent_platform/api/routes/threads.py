@@ -18,6 +18,7 @@ from langgraph_sdk.schema import Thread
 from ...state import state_snapshot_to_thread_state
 from ...schema import (
     ThreadCreate,
+    ThreadPatch,
     ThreadSearchRequest,
     ThreadStateSearch,
 )
@@ -194,3 +195,149 @@ async def get_thread_history_post(
     except Exception as e:
         logger.error(f"Error fetching thread history for thread {thread_id}: {e}")
         return []
+
+
+@threads_router.patch(
+    "/{thread_id}",
+    summary="Update a thread",
+    tags=["threads"]
+)
+async def patch_thread(
+    thread_id: str = Path(..., description="The ID of the thread"),
+    body: ThreadPatch = Body(...),
+    user_id: str = Depends(authenticate_user),
+) -> Thread:
+    """Update a thread"""
+    
+    if user_id:
+        logger.debug(f"Authenticated user_id: {user_id}")
+
+    try:
+        supabase_client = await get_supabase()
+        
+        # First, verify the thread exists and belongs to the user
+        existing_thread_result = (
+            await supabase_client.table("threads")
+            .select("*")
+            .eq("thread_id", thread_id)
+            .eq("user_id", user_id)
+            .execute()
+        )
+        
+        if not existing_thread_result.data:
+            logger.error(f"Thread {thread_id} not found for user {user_id}")
+            raise HTTPException(
+                status_code=404,
+                detail=f"Thread {thread_id} not found"
+            )
+        
+        existing_thread = existing_thread_result.data[0]
+        
+        # Note: updated_at is automatically set by database trigger
+        update_payload = {}
+        
+        # Merge metadata if provided
+        if metadata := body.get("metadata", None):
+            existing_metadata = existing_thread.get("metadata", {}) or {}
+            merged_metadata = {**existing_metadata, **metadata}
+            update_payload["metadata"] = merged_metadata
+        
+        # Update TTL if provided
+        if ttl := body.get("ttl", None):
+            update_payload["ttl"] = ttl
+        
+        # Perform the update
+        result = (
+            await supabase_client.table("threads")
+            .update(update_payload)
+            .eq("thread_id", thread_id)
+            .eq("user_id", user_id)
+            .execute()
+        )
+        
+        if error := getattr(result, "error", None):
+            logger.error(f"Error updating thread {thread_id}: {error}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Internal server error: {error} while updating thread"
+            )
+        
+        updated_data = result.data[0] if result.data else existing_thread
+        
+        # Convert to Thread schema
+        thread = Thread(
+            thread_id=updated_data["thread_id"],
+            created_at=updated_data["created_at"],
+            updated_at=updated_data["updated_at"],
+            metadata=updated_data.get("metadata", {}),
+            status=updated_data.get("status", "idle"),
+            values=updated_data.get("values", {}),
+            interrupts=updated_data.get("interrupts", {}),
+        )
+        
+        logger.debug(f"Thread {thread_id} updated successfully")
+        return thread
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating thread {thread_id}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Internal server error: {e} while updating thread"
+        )
+
+
+@threads_router.delete(
+    "/{thread_id}",
+    summary="Delete a thread by ID.",
+    tags=["threads"],
+    status_code=200
+)
+async def delete_thread(
+    thread_id: str = Path(..., description="The ID of the thread"),
+    user_id: str = Depends(authenticate_user),
+):
+    """Delete a thread by ID."""
+    
+    if user_id:
+        logger.debug(f"Authenticated user_id: {user_id}")
+
+    try:
+        supabase_client = await get_supabase()
+        
+        # Verify thread exists and belongs to user, then delete
+        result = (
+            await supabase_client.table("threads")
+            .delete()
+            .eq("thread_id", thread_id)
+            .eq("user_id", user_id)
+            .execute()
+        )
+        
+        # If no rows were deleted, thread doesn't exist or doesn't belong to user
+        if not result.data:
+            logger.error(f"Thread {thread_id} not found for user {user_id}")
+            raise HTTPException(
+                status_code=404,
+                detail=f"Thread {thread_id} not found"
+            )
+        
+        if error := getattr(result, "error", None):
+            logger.error(f"Error deleting thread {thread_id}: {error}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Internal server error: {error} while deleting thread"
+            )
+        
+        logger.info(f"Thread {thread_id} deleted successfully by user {user_id}")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting thread {thread_id}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Internal server error: {e} while deleting thread"
+        )
+
