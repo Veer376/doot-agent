@@ -1,0 +1,8 @@
+{
+  "dependencies": ["."],
+  "graphs": {
+    "chat_mode": "packages/orbit-core/orbit_core/chat_mode.py:graph",
+    "browser_agent": "packages/orbit-core/orbit_core/agents/browser_agent/agent.py:graph"
+  },
+  "env": {}
+}
