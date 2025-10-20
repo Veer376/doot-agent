@@ -1,21 +1,6 @@
 from .schema import Assistant
 
 default_assistants = {
-    "chat_mode": Assistant(
-        "chat_mode", # assistantId is the graph id for default assistants.
-        config = {
-            "recursion_limit": 10,
-        },
-        graph_id = "chat_mode",
-        metadata = {
-            "is_default": True,
-            "is_primary": False,
-        },
-        created_at = "system",
-        updated_at = "system",
-        name = "Chat Mode",
-        description = "A simple chat assistant that can engage in general conversations.",
-    ),
     "browser_agent": Assistant(
         "browser_agent",
         config = {
