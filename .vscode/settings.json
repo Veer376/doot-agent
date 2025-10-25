@@ -2,12 +2,13 @@
   "python.defaultInterpreterPath": "${workspaceFolder}/.venv/Scripts/python.exe",
   "python.analysis.extraPaths": [
     "${workspaceFolder}/packages/orbit-core",
-    "${workspaceFolder}/packages/agent-platform"
+    "${workspaceFolder}/packages/agent-platform",
+    "./venv/Lib/site-packages"
   ],
   "python.analysis.packageIndexDepths": [
     {
       "name": "orbit_core",
       "depth": 10
     }
-  ]
+  ],
 }
