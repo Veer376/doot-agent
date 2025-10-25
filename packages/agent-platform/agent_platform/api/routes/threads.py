@@ -160,6 +160,73 @@ async def search_threads(
     return threads
 
 
+@threads_router.get(
+    "/{thread_id}/state",
+    summary="Get thread state",
+    tags=["threads"]
+)
+async def get_thread_state(
+    thread_id: str = Path(..., description="The ID of the thread"),
+    user_id: str = Depends(authenticate_user),
+):
+    """Get state for a thread.
+    
+    The latest state of the thread (i.e. latest checkpoint) is returned.
+    This is a fast alternative to fetching full history.
+    """
+    
+    if user_id:
+        logger.debug(f"Authenticated user_id: {user_id}")
+
+    try:
+        # Verify thread exists and belongs to user
+        supabase_client = await get_supabase()
+        thread_result = (
+            await supabase_client.table("threads")
+            .select("*")
+            .eq("thread_id", thread_id)
+            .eq("user_id", user_id)
+            .execute()
+        )
+        
+        if not thread_result.data:
+            logger.error(f"Thread {thread_id} not found for user {user_id}")
+            raise HTTPException(
+                status_code=404,
+                detail=f"Thread {thread_id} not found"
+            )
+        
+        thread = thread_result.data[0]
+        
+        # Get the assistant_id from thread metadata if available
+        # Otherwise default to chat_mode
+        metadata = thread.get("metadata", {}) or {}
+        assistant_id = metadata.get("assistant_id", "chat_mode")
+        
+        # Get the graph
+        graph = await get_graph(assistant_id)
+        
+        # Get the current/latest state (no history)
+        state_snapshot = await graph.aget_state(
+            config={"configurable": {"thread_id": thread_id}}
+        )
+        
+        # Convert to ThreadState format
+        thread_state = state_snapshot_to_thread_state(state_snapshot)
+        
+        logger.debug(f"Fetched latest state for thread {thread_id}")
+        return thread_state
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching thread state for thread {thread_id}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Internal server error: {e} while fetching thread state"
+        )
+
+
 @threads_router.post(
     "/{thread_id}/history",
     summary="Get thread history", 
