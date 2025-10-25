@@ -16,7 +16,7 @@ dependencies = [
     "httpx>=0.25.0",
     "langchain>=0.3.27",
     "langchain-google-genai>=2.1.9",
-    "langchain-google-vertexai"
+    "langchain-google-vertexai",
     "langgraph>=0.6.4",
     "langgraph-checkpoint>=2.1.1",
     "langgraph-checkpoint-postgres>=2.0.23",
