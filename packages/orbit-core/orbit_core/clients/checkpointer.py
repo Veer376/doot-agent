@@ -46,7 +46,8 @@ async def setup_checkpointer(connection_string: Optional[str] = None) -> BaseChe
         conn_str,
         min_size=1,
         max_size=10,
-        open=False
+        open=False,
+        kwargs={"autocommit": True}
     )
     
     # Open the pool
