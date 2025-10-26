@@ -26,9 +26,9 @@ async def process_run(run: Run):
     multitask_strategy = run.get("multitask_strategy", "enqueue")
     kwargs = run.get("kwargs", {})
 
-    # graph: = GRAPHS[run.get("assistant_id", "default")]
+    # NOTE: Assumes assistant and graph IDs are identical — a deliberate simplification while assistant creation is not supported.
+    # TODO: Task - implement assistant creation.
     graph = await get_graph(assistant_id)
-    print("Graph ID: ", assistant_id)
 
     webhook = kwargs.get("webhook", None)
     stream_resumable = kwargs.get(
