@@ -197,7 +197,7 @@ async def patch_thread(
         )
 
 
-@threads_router.delete("/{thread_id}", status_code=200)
+@threads_router.delete("/{thread_id}")
 async def delete_thread(
     thread_id: str = Path(..., description="The ID of the thread"),
     user_id: str = Depends(authenticate_user),
@@ -245,7 +245,7 @@ async def copy_thread(
         )
 
 
-@threads_router.delete("/{thread_id}/checkpoints/{checkpoint_id}", status_code=204)
+@threads_router.delete("/{thread_id}/checkpoints/{checkpoint_id}")
 async def delete_from_checkpoint(
     thread_id: str = Path(..., description="The ID of the thread"),
     checkpoint_id: str = Path(..., description="The checkpoint ID to delete from (inclusive)"),
