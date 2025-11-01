@@ -6,7 +6,7 @@ import asyncio
 import copy
 from collections.abc import AsyncIterator, Sequence
 from datetime import UTC, datetime
-from typing import cast, Any, Literal
+from typing import cast, Any, Literal, TypedDict
 from uuid import UUID, uuid4
 
 import orjson
@@ -17,45 +17,42 @@ from langgraph.types import StateSnapshot
 from langgraph_sdk import Auth
 from starlette.exceptions import HTTPException
 
-from langgraph_runtime_inmem.checkpoint import Checkpointer
-from langgraph_runtime_inmem.database import InMemConnectionProto, connect
-from langgraph_runtime_inmem.inmem_stream import (
-    Message,
-    get_stream_manager,
-)
+from langgraph_sdk.schema import Checkpoint
 from orbit_core.clients import get_supabase
+from orbit_core.clients import get_checkpointer
+from orbit_core.clients import get_store
+from ...graph import get_graph
 
 from ...utils import (
     ensure_uuid as _ensure_uuid,
     snapshot_defaults as _snapshot_defaults,
-    is_jsonb_contained,
     replace_thread_id as _replace_thread_id,
     patch_interrupt as _patch_interrupt,
-    empty_generator as _empty_generator,
-    delete_checkpoints_for_thread as _delete_checkpoints_for_thread,
     state_snapshot_to_thread_state,
 )
 
 import typing
 
-if typing.TYPE_CHECKING:
-    from langgraph_api.config import ThreadTTLConfig
-    from langgraph_api.schema import (
-        Checkpoint,
-        Config,
-        MetadataInput,
-        MetadataValue,
-        OnConflictBehavior,
-        RunStatus,
-        Thread,
-        ThreadSelectField,
-        ThreadStatus,
-        ThreadStreamMode,
-        ThreadUpdateResponse,
-    )
-    from langgraph_api.utils import AsyncConnectionProto
+from langgraph_sdk.schema import (
+    Checkpoint,
+    Config,
+    RunStatus,
+    Thread, 
+    ThreadSelectField,
+    ThreadStatus,
+    ThreadStreamMode,
+    OnConflictBehavior,
+)
 
 logger = structlog.stdlib.get_logger(__name__)
+
+class ThreadTTLConfig(TypedDict, total=False):
+    strategy: Literal["delete"]
+    default_ttl: float | None
+    sweep_interval_minutes: int | None
+
+MetadataInput = dict[str, Any] | None
+MetadataValue = dict[str, Any]
 
 
 class WrappedHTTPException(Exception):
@@ -95,7 +92,6 @@ def _check_filter_match(metadata: dict, filters: Auth.types.FilterType | None) -
 class Threads:
     @staticmethod
     async def search(
-        conn: InMemConnectionProto,
         *,
         user_id: str,
         ids: list[str] | list[UUID] | None = None,
@@ -107,7 +103,7 @@ class Threads:
         sort_by: str | None = None,
         sort_order: str | None = None,
         select: list[ThreadSelectField] | None = None,
-    ) -> tuple[AsyncIterator[Thread], int]:
+    ) -> tuple[list[Thread], int]:
         metadata = metadata if metadata is not None else {}
         values = values if values is not None else {}
 
@@ -173,15 +169,10 @@ class Threads:
         # Calculate cursor
         cursor = offset + limit if total_count > offset + limit else None
 
-        async def thread_iterator() -> AsyncIterator[Thread]:
-            for thread in threads:
-                yield thread
-
-        return thread_iterator(), cursor
+        return threads, cursor
 
     @staticmethod
     async def _get_with_filters(
-        conn: InMemConnectionProto,
         thread_id: UUID,
         user_id: str,
     ) -> Thread | None:
@@ -206,43 +197,36 @@ class Threads:
 
     @staticmethod
     async def _get(
-        conn: InMemConnectionProto,
         thread_id: UUID,
         user_id: str,
     ) -> Thread | None:
         """Get a thread by ID."""
-        return await Threads._get_with_filters(conn, thread_id, user_id)
+        return await Threads._get_with_filters(thread_id, user_id)
 
     @staticmethod
     async def get(
-        conn: InMemConnectionProto,
         thread_id: UUID,
         user_id: str,
-    ) -> AsyncIterator[Thread]:
+    ) -> Thread:
         """Get a thread by ID."""
-        matching_thread = await Threads._get(conn, thread_id, user_id)
+        matching_thread = await Threads._get(thread_id, user_id)
 
         if not matching_thread:
             raise HTTPException(
                 status_code=404, detail=f"Thread with ID {thread_id} not found"
             )
 
-        async def _yield_result():
-            if matching_thread:
-                yield matching_thread
-
-        return _yield_result()
+        return matching_thread
 
     @staticmethod
     async def put(
-        conn: InMemConnectionProto,
         thread_id: UUID | str,
         *,
         user_id: str,
         metadata: MetadataInput,
         if_exists: OnConflictBehavior,
         ttl: ThreadTTLConfig | None = None,
-    ) -> AsyncIterator[Thread]:
+    ) -> Thread:
         """Insert or update a thread."""
         thread_id = _ensure_uuid(thread_id)
         if metadata is None:
@@ -268,11 +252,7 @@ class Threads:
                     status_code=409, detail=f"Thread with ID {thread_id} already exists"
                 )
             elif if_exists == "do_nothing":
-
-                async def _yield_existing():
-                    yield existing_thread
-
-                return _yield_existing()
+                return existing_thread
 
         # Create new thread
         now = datetime.now(UTC)
@@ -301,20 +281,16 @@ class Threads:
 
         inserted_thread = result.data[0] if result.data else new_thread
 
-        async def _yield_new():
-            yield inserted_thread
-
-        return _yield_new()
+        return inserted_thread
 
     @staticmethod
     async def patch(
-        conn: InMemConnectionProto,
         thread_id: UUID,
         *,
         user_id: str,
         metadata: MetadataValue,
         ttl: ThreadTTLConfig | None = None,
-    ) -> AsyncIterator[Thread]:
+    ) -> Thread | None:
         """Update a thread."""
         thread_id = _ensure_uuid(thread_id)
 
@@ -331,12 +307,8 @@ class Threads:
         )
 
         if not existing_result.data:
-            # Return empty iterator if thread not found
-            async def empty_iterator() -> AsyncIterator[Thread]:
-                if False:  # This ensures the iterator is empty
-                    yield
-
-            return empty_iterator()
+            # Return None if thread not found
+            return None
 
         existing_thread = existing_result.data[0]
 
@@ -371,14 +343,10 @@ class Threads:
             result.data[0] if result.data else {**existing_thread, **update_payload}
         )
 
-        async def thread_iterator() -> AsyncIterator[Thread]:
-            yield updated_thread
-
-        return thread_iterator()
+        return updated_thread
 
     @staticmethod
     async def set_status(
-        conn: InMemConnectionProto,
         thread_id: UUID,
         checkpoint: CheckpointPayload | None,
         exception: BaseException | None,
@@ -389,13 +357,16 @@ class Threads:
 
         thread_id = _ensure_uuid(thread_id)
 
-        async def has_pending_runs(conn_: InMemConnectionProto, tid: UUID) -> bool:
+        async def has_pending_runs(tid: UUID) -> bool:
             """Check if thread has any pending runs."""
             # Still using in-memory for runs as we're only updating threads
-            return any(
-                run["status"] in ("pending", "running") and run["thread_id"] == tid
-                for run in conn_.store["runs"]
-            )
+            from langgraph_runtime_inmem.database import connect
+            
+            async with connect() as conn_:
+                return any(
+                    run["status"] in ("pending", "running") and run["thread_id"] == tid
+                    for run in conn_.store["runs"]
+                )
 
         # Get Supabase client
         supabase_client = await get_supabase()
@@ -425,7 +396,7 @@ class Threads:
             status = "idle"
 
         # Check for pending runs and update to busy if found
-        if await has_pending_runs(conn, thread_id):
+        if await has_pending_runs(thread_id):
             status = "busy"
 
         # Update thread in Supabase
@@ -454,7 +425,6 @@ class Threads:
 
     @staticmethod
     async def set_joint_status(
-        conn: InMemConnectionProto,
         thread_id: UUID,
         run_id: UUID,
         run_status: RunStatus | Literal["rollback"],
@@ -478,16 +448,18 @@ class Threads:
         # No auth since it's internal
         from langgraph_api.errors import UserInterrupt, UserRollback
         from langgraph_api.serde import json_dumpb
+        from langgraph_runtime_inmem.database import connect
 
         thread_id = _ensure_uuid(thread_id)
         run_id = _ensure_uuid(run_id)
 
-        def _thread_has_active_runs() -> bool:
+        async def _thread_has_active_runs() -> bool:
             # Still using in-memory for runs
-            return any(
-                r["thread_id"] == thread_id and r["status"] in ("pending", "running")
-                for r in conn.store["runs"]
-            )
+            async with connect() as conn_:
+                return any(
+                    r["thread_id"] == thread_id and r["status"] in ("pending", "running")
+                    for r in conn_.store["runs"]
+                )
 
         # Get Supabase client
         supabase_client = await get_supabase()
@@ -506,14 +478,15 @@ class Threads:
         thread = thread_result.data[0]
 
         # Get run from in-memory store (since we're not updating runs table yet)
-        run = next(
-            (
-                r
-                for r in conn.store["runs"]
-                if r["run_id"] == run_id and r["thread_id"] == thread_id
-            ),
-            None,
-        )
+        async with connect() as conn_:
+            run = next(
+                (
+                    r
+                    for r in conn_.store["runs"]
+                    if r["run_id"] == run_id and r["thread_id"] == thread_id
+                ),
+                None,
+            )
         if run is None:
             raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
 
@@ -541,16 +514,26 @@ class Threads:
             # Import locally to avoid circular imports
             from .runs import Runs
 
-            await Runs.delete(conn, run_id, thread_id=run["thread_id"])
+            # For rollback, we need to get user_id from thread
+            # Runs.delete requires user_id, so we pass thread's user_id
+            # Note: This assumes run belongs to same user as thread
+            async with connect() as conn_:
+                # Delete from in-memory store
+                await Runs.delete(run_id, thread_id=run["thread_id"], user_id=thread.get("user_id"))
+            
             final_thread_status: ThreadStatus = (
-                "busy" if _thread_has_active_runs() else base_thread_status
+                "busy" if await _thread_has_active_runs() else base_thread_status
             )
 
         else:
             # Update run in-memory
-            run.update({"status": run_status, "updated_at": now})
+            async with connect() as conn_:
+                for r in conn_.store["runs"]:
+                    if r["run_id"] == run_id and r["thread_id"] == thread_id:
+                        r.update({"status": run_status, "updated_at": now})
+                        break
 
-            if run_status in ("pending", "running") or _thread_has_active_runs():
+            if run_status in ("pending", "running") or await _thread_has_active_runs():
                 final_thread_status = "busy"
             else:
                 final_thread_status = base_thread_status
@@ -577,48 +560,143 @@ class Threads:
 
     @staticmethod
     async def delete(
-        conn: InMemConnectionProto,
-        thread_id: UUID,
+        thread_id: str,
         user_id: str,
-    ) -> AsyncIterator[UUID]:
+    ) -> UUID:
         """Delete a thread by ID and cascade delete all associated runs."""
-        thread_id = _ensure_uuid(thread_id)
 
-        # Get Supabase client
         supabase_client = await get_supabase()
 
         # Delete thread from Supabase
         result = await (
             supabase_client.table("threads")
             .delete()
-            .eq("thread_id", str(thread_id))
+            .eq("thread_id", thread_id)
             .eq("user_id", user_id)
             .execute()
         )
-
+        
         # If no rows were deleted, thread doesn't exist or doesn't belong to user
         if not result.data:
             raise HTTPException(
                 status_code=404, detail=f"Thread with ID {thread_id} not found"
             )
+            
+        checkpointer = get_checkpointer()
+        await checkpointer.adelete_thread(thread_id)
+        
+        return thread_id
 
-        # Cascade delete all runs associated with this thread (in-memory for now)
-        conn.store["runs"] = [
-            run for run in conn.store["runs"] if run["thread_id"] != thread_id
-        ]
-
-        # Delete checkpoints for this thread
-        _delete_checkpoints_for_thread(thread_id, conn)
-
-        # Return an async iterator with the deleted thread_id
-        async def id_iterator() -> AsyncIterator[UUID]:
-            yield thread_id
-
-        return id_iterator()
+    @staticmethod
+    async def delete_from_checkpoint(
+        thread_id: str,
+        checkpoint_id: str,
+        user_id: str,
+    ) -> None:
+        """Delete all checkpoints from a specific checkpoint onwards (including the checkpoint itself).
+        This effectively rolls back the thread to the parent of the specified checkpoint.
+        """
+        supabase_client = await get_supabase()
+        
+        # First verify the thread belongs to the user
+        thread_result = await (
+            supabase_client.table("threads")
+            .select("thread_id")
+            .eq("thread_id", thread_id)
+            .eq("user_id", user_id)
+            .execute()
+        )
+        
+        if not thread_result.data:
+            raise HTTPException(
+                status_code=404, 
+                detail=f"Thread with ID {thread_id} not found"
+            )
+        
+        checkpointer = get_checkpointer()
+        
+        # Use recursive CTE to find all descendant checkpoints
+        # Then delete them from all checkpoint tables
+        async with checkpointer._cursor(pipeline=True) as cur:
+            # Find all checkpoint IDs to delete (the target checkpoint and all its descendants)
+            await cur.execute(
+                """
+                WITH RECURSIVE checkpoint_tree AS (
+                    -- Base case: the checkpoint we want to delete
+                    SELECT checkpoint_id, thread_id, checkpoint_ns, parent_checkpoint_id
+                    FROM checkpoints
+                    WHERE thread_id = %s AND checkpoint_id = %s
+                    
+                    UNION ALL
+                    
+                    -- Recursive case: find all children
+                    SELECT c.checkpoint_id, c.thread_id, c.checkpoint_ns, c.parent_checkpoint_id
+                    FROM checkpoints c
+                    INNER JOIN checkpoint_tree ct ON c.parent_checkpoint_id = ct.checkpoint_id 
+                        AND c.thread_id = ct.thread_id
+                        AND c.checkpoint_ns = ct.checkpoint_ns
+                )
+                DELETE FROM checkpoint_writes
+                WHERE (thread_id, checkpoint_ns, checkpoint_id) IN (
+                    SELECT thread_id, checkpoint_ns, checkpoint_id FROM checkpoint_tree
+                )
+                """,
+                (str(thread_id), checkpoint_id),
+            )
+            
+            await cur.execute(
+                """
+                WITH RECURSIVE checkpoint_tree AS (
+                    SELECT checkpoint_id, thread_id, checkpoint_ns, parent_checkpoint_id
+                    FROM checkpoints
+                    WHERE thread_id = %s AND checkpoint_id = %s
+                    
+                    UNION ALL
+                    
+                    SELECT c.checkpoint_id, c.thread_id, c.checkpoint_ns, c.parent_checkpoint_id
+                    FROM checkpoints c
+                    INNER JOIN checkpoint_tree ct ON c.parent_checkpoint_id = ct.checkpoint_id 
+                        AND c.thread_id = ct.thread_id
+                        AND c.checkpoint_ns = ct.checkpoint_ns
+                )
+                DELETE FROM checkpoint_blobs
+                WHERE (thread_id, checkpoint_ns) IN (
+                    SELECT DISTINCT thread_id, checkpoint_ns FROM checkpoint_tree
+                )
+                AND version > (
+                    SELECT MIN(checkpoint_id) FROM checkpoint_tree WHERE thread_id = %s
+                )
+                """,
+                (str(thread_id), checkpoint_id, str(thread_id)),
+            )
+            
+            await cur.execute(
+                """
+                WITH RECURSIVE checkpoint_tree AS (
+                    SELECT checkpoint_id, thread_id, checkpoint_ns, parent_checkpoint_id
+                    FROM checkpoints
+                    WHERE thread_id = %s AND checkpoint_id = %s
+                    
+                    UNION ALL
+                    
+                    SELECT c.checkpoint_id, c.thread_id, c.checkpoint_ns, c.parent_checkpoint_id
+                    FROM checkpoints c
+                    INNER JOIN checkpoint_tree ct ON c.parent_checkpoint_id = ct.checkpoint_id 
+                        AND c.thread_id = ct.thread_id
+                        AND c.checkpoint_ns = ct.checkpoint_ns
+                )
+                DELETE FROM checkpoints
+                WHERE (thread_id, checkpoint_ns, checkpoint_id) IN (
+                    SELECT thread_id, checkpoint_ns, checkpoint_id FROM checkpoint_tree
+                )
+                """,
+                (str(thread_id), checkpoint_id),
+            )
+        
+        logger.info(f"Deleted checkpoints from {checkpoint_id} onwards for thread {thread_id}")
 
     @staticmethod
     async def _delete_with_run(
-        conn: InMemConnectionProto,
         thread_id: UUID,
         run_id: UUID,
         user_id: str,
@@ -626,15 +704,14 @@ class Threads:
         """Delete a thread by ID."""
         # We don't really care about "optimal" here.
         # Note: This needs user_id to properly delete from Supabase
-        await Threads.delete(conn, thread_id, user_id)
+        await Threads.delete(thread_id, user_id)
         return thread_id
 
     @staticmethod
     async def copy(
-        conn: InMemConnectionProto,
         thread_id: UUID,
         user_id: str,
-    ) -> AsyncIterator[Thread]:
+    ) -> Thread | None:
         """Create a copy of an existing thread."""
         thread_id = _ensure_uuid(thread_id)
         new_thread_id = uuid4()
@@ -642,50 +719,53 @@ class Threads:
         # Get Supabase client
         supabase_client = await get_supabase()
 
-        async with conn.pipeline():
-            # Find the original thread in Supabase
-            original_result = await (
-                supabase_client.table("threads")
-                .select("*")
-                .eq("thread_id", str(thread_id))
-                .eq("user_id", user_id)
-                .execute()
+        # Find the original thread in Supabase
+        original_result = await (
+            supabase_client.table("threads")
+            .select("*")
+            .eq("thread_id", str(thread_id))
+            .eq("user_id", user_id)
+            .execute()
+        )
+
+        if not original_result.data:
+            return None
+
+        original_thread = original_result.data[0]
+
+        # Create new thread with copied metadata
+        now = datetime.now(tz=UTC)
+        new_thread: Thread = {
+            "thread_id": str(new_thread_id),
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat(),
+            "metadata": copy.deepcopy(original_thread.get("metadata", {})),
+            "status": "idle",
+            "values": {},
+            "interrupts": {},
+        }
+
+        # Insert new thread to Supabase
+        result = await (
+            supabase_client.table("threads")
+            .insert({"user_id": user_id, **new_thread})
+            .execute()
+        )
+
+        if error := getattr(result, "error", None):
+            raise HTTPException(
+                status_code=500,
+                detail=f"Internal server error: {error} while copying thread",
             )
 
-            if not original_result.data:
-                return _empty_generator()
+        inserted_thread = result.data[0] if result.data else new_thread
 
-            original_thread = original_result.data[0]
-
-            # Create new thread with copied metadata
-            now = datetime.now(tz=UTC)
-            new_thread: Thread = {
-                "thread_id": str(new_thread_id),
-                "created_at": now.isoformat(),
-                "updated_at": now.isoformat(),
-                "metadata": copy.deepcopy(original_thread.get("metadata", {})),
-                "status": "idle",
-                "values": {},
-                "interrupts": {},
-            }
-
-            # Insert new thread to Supabase
-            result = await (
-                supabase_client.table("threads")
-                .insert({"user_id": user_id, **new_thread})
-                .execute()
-            )
-
-            if error := getattr(result, "error", None):
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"Internal server error: {error} while copying thread",
-                )
-
-            inserted_thread = result.data[0] if result.data else new_thread
-
-            # Copy checkpoints
-            checkpointer = Checkpointer()
+        # Copy checkpoints using the configured checkpointer
+        checkpointer = get_checkpointer()
+        
+        
+        # If an in-memory checkpointer is in use, preserve existing behavior
+        if hasattr(checkpointer, "storage"):
             if str(thread_id) in checkpointer.storage:
                 copied_storage = _replace_thread_id(
                     checkpointer.storage[str(thread_id)], new_thread_id, thread_id
@@ -714,15 +794,83 @@ class Threads:
                 if str(k[0]) == str(thread_id):
                     new_key = (str(new_thread_id), *k[1:])
                     checkpointer.blobs[new_key] = checkpointer.blobs[k]
+        elif True:
+            # For AsyncPostgresSaver, directly copy checkpoint data from database tables
+            # This is similar to how adelete_thread works but copies instead of deleting
+            try:
+                async with checkpointer._cursor(pipeline=True) as cur:
+                    # Copy checkpoints table
+                    await cur.execute(
+                        """
+                        INSERT INTO checkpoints (thread_id, checkpoint_ns, checkpoint_id, parent_checkpoint_id, type, checkpoint, metadata)
+                        SELECT %s, checkpoint_ns, checkpoint_id, parent_checkpoint_id, type, checkpoint, metadata
+                        FROM checkpoints
+                        WHERE thread_id = %s
+                        """,
+                        (str(new_thread_id), str(thread_id)),
+                    )
+                    # Copy checkpoint_blobs table
+                    await cur.execute(
+                        """
+                        INSERT INTO checkpoint_blobs (thread_id, checkpoint_ns, channel, version, type, blob)
+                        SELECT %s, checkpoint_ns, channel, version, type, blob
+                        FROM checkpoint_blobs
+                        WHERE thread_id = %s
+                        """,
+                        (str(new_thread_id), str(thread_id)),
+                    )
+                    # Copy checkpoint_writes table
+                    await cur.execute(
+                        """
+                        INSERT INTO checkpoint_writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, blob)
+                        SELECT %s, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, blob
+                        FROM checkpoint_writes
+                        WHERE thread_id = %s
+                        """,
+                        (str(new_thread_id), str(thread_id)),
+                    )
+                
+                logger.info(f"Successfully copied checkpoint data from {thread_id} to {new_thread_id}")
+                
+            except Exception as e:
+                logger.error(f"Failed to copy checkpoint data: {str(e)}", error=str(e))
+                
+        else:
+            try:
+                async for tpl in checkpointer.alist(
+                    None, filter={"thread_id": str(thread_id)}
+                ):
+                    # tpl is a CheckpointTuple with fields: config, checkpoint, metadata, parent_config, pending_writes
+                    new_config = copy.deepcopy(tpl.config)
+                    if not new_config.get("configurable"):
+                        new_config["configurable"] = {}
+                    new_config["configurable"]["thread_id"] = str(new_thread_id)
 
-            async def row_generator() -> AsyncIterator[Thread]:
-                yield inserted_thread
+                    new_metadata = dict(tpl.metadata or {})
+                    # mark as forked copy
+                    new_metadata.setdefault("source", "fork")
 
-            return row_generator()
+                    # Use checkpoint's channel_versions as new_versions
+                    new_versions = tpl.checkpoint.get("channel_versions", {})
+
+                    await checkpointer.aput(new_config, tpl.checkpoint, new_metadata, new_versions)
+
+                    if getattr(tpl, "pending_writes", None):
+                        # pending_writes is a list of (channel, key, value) tuples in some implementations;
+                        # attempt a reasonable mapping to put_writes. If this fails, ignore writes copy.
+                        try:
+                            writes = [(w[1], w[2]) for w in tpl.pending_writes]
+                            await checkpointer.aput_writes(new_config, writes, task_id=tpl.checkpoint.get("id", "copied"))
+                        except Exception:
+                            # ignore writes copy errors
+                            pass
+            except Exception as e:
+                logger.error(f"Failed to copy checkpoint data: {str(e)}", error=str(e))
+                
+        return inserted_thread
 
     @staticmethod
     async def sweep_ttl(
-        conn: InMemConnectionProto,
         *,
         limit: int | None = None,
         batch_size: int = 100,
@@ -736,24 +884,16 @@ class Threads:
 
         @staticmethod
         async def get(
-            conn: InMemConnectionProto,
             config: Config,
+            user_id: str,
             subgraphs: bool = False,
-            ctx: Auth.types.BaseAuthContext | None = None,
         ) -> StateSnapshot:
             """Get state for a thread."""
-            from langgraph_api.graph import get_graph
-            from langgraph_api.store import get_store
 
-            checkpointer = await asyncio.to_thread(
-                Checkpointer, conn, unpack_hook=_msgpack_ext_hook_to_json
-            )
-            thread_id = _ensure_uuid(config["configurable"]["thread_id"])
-            # Auth will be applied here so no need to use filters downstream
-            thread_iter = await Threads.get(conn, thread_id, ctx=ctx)
-            thread = await anext(thread_iter)
-            checkpoint = await checkpointer.aget(config)
-
+            checkpointer = get_checkpointer()
+            thread_id = config["configurable"]["thread_id"]
+            
+            thread = await Threads.get(thread_id, user_id=user_id)
             if not thread:
                 return StateSnapshot(
                     values={},
@@ -766,8 +906,8 @@ class Threads:
                     **_snapshot_defaults(),
                 )
 
-            metadata = thread.get("metadata", {})
-            thread_config = cast(dict[str, Any], thread.get("config", {}))
+            metadata = thread.get("metadata", {}) or {}
+            thread_config = thread.get("config") or {}
             thread_config = {
                 **thread_config,
                 "configurable": {
@@ -777,30 +917,38 @@ class Threads:
             }
 
             # Fallback to graph_id from run if not in thread metadata
-            graph_id = metadata.get("graph_id")
-            if not graph_id:
-                for run in conn.store["runs"]:
-                    if run["thread_id"] == thread_id:
-                        graph_id = run["kwargs"]["config"]["configurable"]["graph_id"]
-                        break
-
+            assistant_id = metadata.get("assistant_id")
+            
+            # For now the graph_id = assistant_id
+            # graph_id = metadata.get("graph_id")
+            # if not graph_id:
+            #     from langgraph_runtime_inmem.database import connect
+            #     async with connect() as conn_:
+            #         for run in conn_.store["runs"]:
+            #             if run["thread_id"] == thread_id:
+            #                 graph_id = run["kwargs"]["config"]["configurable"]["graph_id"]
+            #                 break
+            
+            graph_id = assistant_id # later we will pass the signature. <assistant_id:graph_id>
+            
             if graph_id:
-                # format latest checkpoint for response
-                checkpointer.latest_iter = checkpoint
-                async with get_graph(
-                    graph_id,
-                    thread_config,
-                    checkpointer=checkpointer,
-                    store=(await get_store()),
-                ) as graph:
-                    result = await graph.aget_state(config, subgraphs=subgraphs)
-                    if (
-                        result.metadata is not None
-                        and "checkpoint_ns" in result.metadata
-                        and result.metadata["checkpoint_ns"] == ""
-                    ):
-                        result.metadata.pop("checkpoint_ns")
-                    return result
+                # checkpointer.latest_iter = checkpoint
+                graph = await get_graph(
+                            graph_id,
+                            thread_config,
+                            checkpointer=checkpointer,
+                            store=get_store(),
+                        )
+                result = await graph.aget_state(config, subgraphs=subgraphs)
+                if (
+                    result.metadata is not None
+                    and "checkpoint_ns" in result.metadata
+                    and result.metadata["checkpoint_ns"] == ""
+                ):
+                    result.metadata.pop("checkpoint_ns")
+                    
+                return result
+            
             else:
                 return StateSnapshot(
                     values={},
@@ -815,7 +963,6 @@ class Threads:
 
         @staticmethod
         async def post(
-            conn: InMemConnectionProto,
             config: Config,
             values: Sequence[dict] | dict[str, Any] | None,
             as_node: str | None = None,
@@ -834,9 +981,11 @@ class Threads:
                 Auth.types.ThreadsUpdate(thread_id=thread_id),
             )
 
+            from langgraph_runtime_inmem.database import connect
+            
             checkpointer = Checkpointer()
 
-            thread_iter = await Threads.get(conn, thread_id, ctx=ctx)
+            thread_iter = await Threads.get(thread_id, user_id=ctx.get("user_id") if ctx else "")
             thread = await fetchone(
                 thread_iter, not_found_detail=f"Thread {thread_id} not found."
             )
@@ -850,12 +999,13 @@ class Threads:
             metadata = thread["metadata"]
             thread_config = thread["config"]
             # Check that there are no in-flight runs
-            pending_runs = [
-                run
-                for run in conn.store["runs"]
-                if run["thread_id"] == thread_id
-                and run["status"] in ("pending", "running")
-            ]
+            async with connect() as conn_:
+                pending_runs = [
+                    run
+                    for run in conn_.store["runs"]
+                    if run["thread_id"] == thread_id
+                    and run["status"] in ("pending", "running")
+                ]
             if pending_runs:
                 raise HTTPException(
                     status_code=409,
@@ -872,10 +1022,11 @@ class Threads:
             # Fallback to graph_id from run if not in thread metadata
             graph_id = metadata.get("graph_id")
             if not graph_id:
-                for run in conn.store["runs"]:
-                    if run["thread_id"] == thread_id:
-                        graph_id = run["kwargs"]["config"]["configurable"]["graph_id"]
-                        break
+                async with connect() as conn_:
+                    for run in conn_.store["runs"]:
+                        if run["thread_id"] == thread_id:
+                            graph_id = run["kwargs"]["config"]["configurable"]["graph_id"]
+                            break
 
             if graph_id:
                 config["configurable"].setdefault("graph_id", graph_id)
@@ -885,7 +1036,7 @@ class Threads:
                     graph_id,
                     thread_config,
                     checkpointer=checkpointer,
-                    store=(await get_store()),
+                    store=get_store(),
                 ) as graph:
                     update_config = config.copy()
                     update_config["configurable"] = {
@@ -900,13 +1051,16 @@ class Threads:
 
                     # Get current state
                     state = await Threads.State.get(
-                        conn, config, subgraphs=False, ctx=ctx
+                        config, subgraphs=False, ctx=ctx
                     )
-                    # Update thread values
-                    for thread in conn.store["threads"]:
-                        if thread["thread_id"] == thread_id:
-                            thread["values"] = state.values
-                            break
+                    # Update thread values in Supabase
+                    supabase_client = await get_supabase()
+                    await (
+                        supabase_client.table("threads")
+                        .update({"values": state.values})
+                        .eq("thread_id", str(thread_id))
+                        .execute()
+                    )
 
                     # Publish state update event
                     from langgraph_api.serde import json_dumpb
@@ -936,11 +1090,10 @@ class Threads:
 
         @staticmethod
         async def bulk(
-            conn: InMemConnectionProto,
             *,
             config: Config,
+            user_id: str,
             supersteps: Sequence[dict],
-            ctx: Auth.types.BaseAuthContext | None = None,
         ) -> ThreadUpdateResponse:
             """Update a thread with a batch of state updates."""
 
@@ -949,19 +1102,10 @@ class Threads:
             from langgraph_api.graph import get_graph
             from langgraph_api.schema import ThreadUpdateResponse
             from langgraph_api.store import get_store
-            from langgraph_api.utils import fetchone
 
             thread_id = _ensure_uuid(config["configurable"]["thread_id"])
-            filters = await Threads.handle_event(
-                ctx,
-                "update",
-                Auth.types.ThreadsUpdate(thread_id=thread_id),
-            )
 
-            thread_iter = await Threads.get(conn, thread_id, ctx=ctx)
-            thread = await fetchone(
-                thread_iter, not_found_detail=f"Thread {thread_id} not found."
-            )
+            thread = await Threads.get(thread_id, user_id=user_id)
 
             thread_config = cast(dict[str, Any], thread["config"])
             thread_config = {
@@ -976,9 +1120,6 @@ class Threads:
             if not thread:
                 raise HTTPException(status_code=404, detail="Thread not found")
 
-            if not _check_filter_match(metadata, filters):
-                raise HTTPException(status_code=403, detail="Forbidden")
-
             if graph_id := metadata.get("graph_id"):
                 config["configurable"].setdefault("graph_id", graph_id)
                 config["configurable"].setdefault("checkpoint_ns", "")
@@ -986,8 +1127,8 @@ class Threads:
                 async with get_graph(
                     graph_id,
                     thread_config,
-                    checkpointer=Checkpointer(),
-                    store=(await get_store()),
+                    checkpointer=get_checkpointer(),
+                    store=get_store(),
                 ) as graph:
                     next_config = await graph.abulk_update_state(
                         config,
@@ -1008,14 +1149,17 @@ class Threads:
                     )
 
                     state = await Threads.State.get(
-                        conn, config, subgraphs=False, ctx=ctx
+                        config, subgraphs=False, ctx=ctx
                     )
 
-                    # update thread values
-                    for thread in conn.store["threads"]:
-                        if thread["thread_id"] == thread_id:
-                            thread["values"] = state.values
-                            break
+                    # Update thread values in Supabase
+                    supabase_client = await get_supabase()
+                    await (
+                        supabase_client.table("threads")
+                        .update({"values": state.values})
+                        .eq("thread_id", str(thread_id))
+                        .execute()
+                    )
 
                     # Publish state update event
                     from langgraph_api.serde import json_dumpb
@@ -1042,36 +1186,28 @@ class Threads:
 
         @staticmethod
         async def list(
-            conn: InMemConnectionProto,
             *,
             config: Config,
+            user_id: str,
             limit: int = 1,
             before: str | Checkpoint | None = None,
             metadata: MetadataInput = None,
-            ctx: Auth.types.BaseAuthContext | None = None,
         ) -> list[StateSnapshot]:
             """Get the history of a thread."""
-            from langgraph_api.graph import get_graph
-            from langgraph_api.store import get_store
-            from langgraph_api.utils import fetchone
-
-            thread_id = _ensure_uuid(config["configurable"]["thread_id"])
-            thread = None
-            filters = await Threads.handle_event(
-                ctx,
-                "read",
-                Auth.types.ThreadsRead(thread_id=thread_id),
-            )
-            thread = await fetchone(
-                await Threads.get(conn, config["configurable"]["thread_id"], ctx=ctx)
-            )
-
-            # Parse thread metadata and config
-            thread_metadata = thread["metadata"]
-            if not _check_filter_match(thread_metadata, filters):
+            
+            thread_id = config["configurable"]["thread_id"]
+            
+            thread = await Threads.get(thread_id, user_id=user_id)
+            
+            if not thread:
                 return []
 
-            thread_config = cast(dict[str, Any], thread["config"])
+            # Parse thread metadata and config
+            thread_metadata = thread.get("metadata", {}) or {}
+            
+            # FISHY: should we use the assistant metadata or thread metadata to create the graph ??
+            # Feature: assistant management. This has to be revisisted on assistant management feature.
+            thread_config = thread.get("config") or {}
             thread_config = {
                 **thread_config,
                 "configurable": {
@@ -1079,42 +1215,44 @@ class Threads:
                     **config.get("configurable", {}),
                 },
             }
-            # If graph_id exists, get state history
-            if graph_id := thread_metadata.get("graph_id"):
-                async with get_graph(
-                    graph_id,
-                    thread_config,
-                    checkpointer=await asyncio.to_thread(
-                        Checkpointer, conn, unpack_hook=_msgpack_ext_hook_to_json
-                    ),
-                    store=(await get_store()),
-                ) as graph:
-                    # Convert before parameter if it's a string
-                    before_param = (
-                        {"configurable": {"checkpoint_id": before}}
-                        if isinstance(before, str)
-                        else before
+            assistant_id = thread_metadata.get("assistant_id")
+            graph_id = assistant_id # later we will pass the signature. <assistant_id:graph_id>
+            
+            if graph_id:
+                graph = await get_graph(
+                        graph_id,
+                        thread_config,
+                        checkpointer=get_checkpointer(),
+                        store=get_store(),
                     )
-
-                    states = [
-                        state
-                        async for state in graph.aget_state_history(
-                            config, limit=limit, filter=metadata, before=before_param
-                        )
-                    ]
-
-                    return states
+                
+                before_param = (
+                    {"configurable": {"checkpoint_id": before}}
+                    if isinstance(before, str)
+                    else before
+                )
+                
+                states = [
+                    state
+                    async for state in graph.aget_state_history(
+                        config, limit=limit, filter=metadata, before=before_param
+                    )
+                ]
+                
+                return states
 
             return []
 
     class Stream:
         @staticmethod
         async def subscribe(
-            conn: InMemConnectionProto | AsyncConnectionProto,
             thread_id: UUID,
             seen_runs: set[UUID],
         ) -> list[tuple[UUID, asyncio.Queue]]:
             """Subscribe to the thread stream, creating queues for unseen runs."""
+            from langgraph_runtime_inmem.database import connect
+            from ...stream_manager import get_stream_manager
+            
             stream_manager = get_stream_manager()
             queues = []
 
@@ -1127,13 +1265,14 @@ class Threads:
                 queues.append((thread_id, queue))
                 seen_runs.add(thread_id)
 
-            for run in conn.store["runs"]:
-                if run["thread_id"] == thread_id:
-                    run_id = run["run_id"]
-                    if run_id not in seen_runs:
-                        queue = await stream_manager.add_queue(run_id, thread_id)
-                        queues.append((run_id, queue))
-                        seen_runs.add(run_id)
+            async with connect() as conn_:
+                for run in conn_.store["runs"]:
+                    if run["thread_id"] == thread_id:
+                        run_id = run["run_id"]
+                        if run_id not in seen_runs:
+                            queue = await stream_manager.add_queue(run_id, thread_id)
+                            queues.append((run_id, queue))
+                            seen_runs.add(run_id)
 
             return queues
 
@@ -1166,12 +1305,15 @@ class Threads:
                         pass
                 return True
 
+            from langgraph_runtime_inmem.database import connect
+            from ...stream_manager import get_stream_manager
+            
             stream_manager = get_stream_manager()
             seen_runs: set[UUID] = set()
             created_queues: list[tuple[UUID, asyncio.Queue]] = []
 
             try:
-                async with connect() as conn:
+                async with connect() as conn_:
                     await logger.ainfo(
                         "Joined thread stream",
                         thread_id=str(thread_id),
@@ -1219,7 +1361,7 @@ class Threads:
                     while True:
                         # Refresh queues to pick up any new runs that joined this thread
                         new_queue_tuples = await Threads.Stream.subscribe(
-                            conn, thread_id, seen_runs
+                            thread_id, seen_runs
                         )
                         # Track new queues for cleanup
                         for run_id, queue in new_queue_tuples:
@@ -1287,6 +1429,7 @@ class Threads:
         ) -> None:
             """Publish a thread-level event to the thread stream."""
             from langgraph_api.utils.stream_codec import STREAM_CODEC
+            from ...stream_manager import get_stream_manager, Message
 
             topic = f"thread:{thread_id}:stream".encode()
 
@@ -1298,7 +1441,6 @@ class Threads:
 
     @staticmethod
     async def count(
-        conn: InMemConnectionProto,
         *,
         user_id: str,
         metadata: MetadataInput = None,

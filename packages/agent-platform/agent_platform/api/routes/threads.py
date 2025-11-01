@@ -11,88 +11,55 @@ from fastapi import (
     HTTPException,
     Path,
 )
-import time
 import uuid
 import logging
 from langgraph_sdk.schema import Thread
-from ...state import state_snapshot_to_thread_state
+from ...utils import state_snapshot_to_thread_state
 from ...schema import (
     ThreadCreate,
     ThreadPatch,
     ThreadSearchRequest,
     ThreadStateSearch,
 )
-from langgraph.graph import START, END, StateGraph, MessagesState
-import pprint
-from orbit_core.clients import get_supabase
-from orbit_core.clients.checkpointer import get_checkpointer
 from ..utils import authenticate_user
+from ..services.threads import Threads
 
 logger = logging.getLogger("threads")
 threads_router = APIRouter(prefix="/threads")
 
 
-@threads_router.post(
-    "",
-    summary="Create a new thread",
-    tags=["threads"])
+@threads_router.post("")
 async def create_thread(
     body: ThreadCreate = Body(...),
     user_id: str = Depends(authenticate_user),
 ) -> Thread:
     """Create a new thread."""
-    # TODO: handle the TTL
-
-    if user_id:
-        logger.debug(f"Authenticated user_id: {user_id}")
 
     if body.get("supersteps", None) or body.get("values", None):
-        logger.error(
-            f"Got Supersteps or values, but supersteps or values not supported yet"
-        )
+        logger.error(f"Got Supersteps or values, but supersteps or values not supported yet")
         raise ValueError("supersteps or values not supported yet")
 
-    thread = Thread(
-        thread_id=body.get("thread_id", None) or str(uuid.uuid4()),
-        created_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        updated_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        metadata=body.get("metadata", None) or {},
-        status="idle",
-        values={},
-        interrupts={},
-    )
+    thread_id = body.get("thread_id", None) or str(uuid.uuid4())
+    metadata = body.get("metadata", None) or {}
 
     try:
-        supabase_client = await get_supabase()
-        result = (
-            await supabase_client.table("threads")
-            .insert({"user_id": user_id, **thread})
-            .execute()
+        created = await Threads.put(
+            thread_id,
+            user_id=user_id,
+            metadata=metadata,
+            if_exists="raise",
+            ttl=body.get("ttl", None),
         )
-
-        if error := getattr(result, "error", None):
-            logger.error(f"Error inserting thread into database: {error}")
-            raise HTTPException(
-                status_code=500,
-                detail=f"Internal server error: {error} while creating thread",
-            )
-
-        logger.debug(f"Thread created: {getattr(result, 'data', None)}")
-
     except Exception as e:
         logger.error(f"Error creating thread: {e}")
         raise HTTPException(
             status_code=500, detail=f"Internal server error: {e} while creating thread"
         )
 
-    return thread
+    return created
 
 
-@threads_router.post(
-    "/search", 
-    summary="Search for threads", 
-    tags=["threads"]
-)
+@threads_router.post("/search")
 async def search_threads(
     user_id: str = Depends(authenticate_user), 
     body: ThreadSearchRequest = Body(...)
@@ -103,53 +70,18 @@ async def search_threads(
     # NOTE: implement the proper filtering based on the request body.
 
     try:
-        supabase_client = await get_supabase()
-
-        # Determine which fields to select
-        # Note: select() must be called first in Supabase query builder
-        select_fields = "*"
-        if select := body.get("select", None):
-            # Map ThreadSelectField to actual database columns
-            # The database has: thread_id, user_id, created_at, updated_at, metadata, status
-            # Some fields like 'config', 'context', 'values', 'interrupts' may be in metadata or separate columns
-            select_fields = ",".join(select)  # Trust that these are valid column names
-
-        # Build query starting with select
-        query = (
-            supabase_client.table("threads")
-            .select(select_fields)
-            .eq("user_id", user_id)
+        threads, _next_offset = await Threads.search(
+            user_id=user_id,
+            ids=body.get("ids", None),
+            metadata=body.get("metadata", None),
+            values=body.get("values", None),
+            status=body.get("status", None),
+            limit=body.get("limit", 100),
+            offset=body.get("offset", 0),
+            sort_by=body.get("sort_by", None),
+            sort_order=body.get("sort_order", None),
+            select=body.get("select", None),
         )
-
-        if ids := body.get("ids", None):
-            query = query.in_("thread_id", ids)
-
-        if status := body.get("status", None):
-            query = query.eq("status", status)
-
-        # TODO: Implement metadata filtering properly with JSONB queries
-        # if body.metadata:
-        #     for key, value in body.metadata.items():
-        #         query = query.eq(f"metadata->{key}", value)
-
-        # TODO: Implement values filtering with JSONB queries
-        # if body.values:
-        #     for key, value in body.values.items():
-        #         query = query.eq(f"values->{key}", value)
-
-        if limit := body.get("limit", None):
-            query = query.limit(limit)
-
-        if offset := body.get("offset", None):
-            query = query.offset(offset)
-
-        if sort_by := body.get("sort_by", "updated_at"):
-            sort_order = body.get("sort_order", "desc")
-            query = query.order(sort_by, desc=(sort_order == "desc"))
-
-        result = await query.execute()
-
-        threads = result.data or []
 
     except Exception as e:
         logger.error(f"Error searching threads: {e}")
@@ -160,58 +92,24 @@ async def search_threads(
     return threads
 
 
-@threads_router.get(
-    "/{thread_id}/state",
-    summary="Get thread state",
-    tags=["threads"]
-)
+@threads_router.get("/{thread_id}/state")
 async def get_thread_state(
     thread_id: str = Path(..., description="The ID of the thread"),
     user_id: str = Depends(authenticate_user),
+    subgraphs: bool = Query(False, description="Whether to include subgraphs in the response."),
 ):
     """Get state for a thread.
     
     The latest state of the thread (i.e. latest checkpoint) is returned.
     This is a fast alternative to fetching full history.
     """
-    
-    if user_id:
-        logger.debug(f"Authenticated user_id: {user_id}")
-
     try:
-        # Verify thread exists and belongs to user
-        supabase_client = await get_supabase()
-        thread_result = (
-            await supabase_client.table("threads")
-            .select("*")
-            .eq("thread_id", thread_id)
-            .eq("user_id", user_id)
-            .execute()
+        state_snapshot = await Threads.State.get(
+            config={"configurable": {"thread_id": thread_id}},
+            user_id=user_id,
+            subgraphs=subgraphs,
         )
         
-        if not thread_result.data:
-            logger.error(f"Thread {thread_id} not found for user {user_id}")
-            raise HTTPException(
-                status_code=404,
-                detail=f"Thread {thread_id} not found"
-            )
-        
-        thread = thread_result.data[0]
-        
-        # Get the assistant_id from thread metadata if available
-        # Otherwise default to chat_mode
-        metadata = thread.get("metadata", {}) or {}
-        assistant_id = metadata.get("assistant_id", "chat_mode")
-        
-        # Get the graph
-        graph = await get_graph(assistant_id)
-        
-        # Get the current/latest state (no history)
-        state_snapshot = await graph.aget_state(
-            config={"configurable": {"thread_id": thread_id}}
-        )
-        
-        # Convert to ThreadState format
         thread_state = state_snapshot_to_thread_state(state_snapshot)
         
         logger.debug(f"Fetched latest state for thread {thread_id}")
@@ -227,48 +125,46 @@ async def get_thread_state(
         )
 
 
-@threads_router.post(
-    "/{thread_id}/history",
-    summary="Get thread history", 
-    tags=["threads"]
-)
+@threads_router.post("/{thread_id}/history")
 async def get_thread_history_post(
     thread_id: str = Path(...),
     body: ThreadStateSearch = Body(...),
+    user_id: str = Depends(authenticate_user),
 ):
-    """Get all past states for a thread.  NOTE: In the official docs, state snapshots are fetchted from the graph_id configured in the thread_id.
-    For now we will use the new minimal compiled graph. Later we will get it from the thread itself, as we also have to maintain the agent_id in the thread
-    to preserve the previously used agent, if there would be multiple agents for per graph we will use agent namespace signature <graph_id>:<agent_id> to fetch the correct graph.
-    Though in cases of the non compiled where we have to pass the assistant details to get the compiled graph, so it this is little bit complex, we will think about it later.
-    Minimal graph seems the easiest solution for future also. 'll see."""
+    """Get all past states for a thread."""
 
     try:
-        graph = StateGraph(MessagesState).add_edge(START, END).compile(checkpointer=get_checkpointer())
-        states = [
-            state_snapshot_to_thread_state(
-                state
-            )
-            async for state in graph.aget_state_history(
-                config={"configurable": {"thread_id": thread_id}},
-                # TODO: Implement filtering
-                before=body.get("before", None),
-                limit=body.get("limit", None),
-            )
+        states = await Threads.State.list(
+            config=body.get("before", {"configurable": {"thread_id": thread_id}}) ,
+            user_id=user_id,
+            limit=body.get("limit", 10),
+            before=body.get("before", None),
+            metadata=body.get("metadata", None),
+        )
+        
+        # Convert StateSnapshots to ThreadState format
+        thread_states = [
+            state_snapshot_to_thread_state(state)
+            for state in states
         ]
-        if not states:
+        
+        if not thread_states:
             logger.warning(f"No states found for thread {thread_id}")
-        return states
+        
+        return thread_states
+    
+    except HTTPException:
+        raise
     
     except Exception as e:
         logger.error(f"Error fetching thread history for thread {thread_id}: {e}")
-        return []
+        raise HTTPException(
+            status_code=500,
+            detail=f"Internal server error: {e} while fetching thread history"
+        )
 
 
-@threads_router.patch(
-    "/{thread_id}",
-    summary="Update a thread",
-    tags=["threads"]
-)
+@threads_router.patch("/{thread_id}")
 async def patch_thread(
     thread_id: str = Path(..., description="The ID of the thread"),
     body: ThreadPatch = Body(...),
@@ -276,77 +172,23 @@ async def patch_thread(
 ) -> Thread:
     """Update a thread"""
     
-    if user_id:
-        logger.debug(f"Authenticated user_id: {user_id}")
-
     try:
-        supabase_client = await get_supabase()
-        
-        # First, verify the thread exists and belongs to the user
-        existing_thread_result = (
-            await supabase_client.table("threads")
-            .select("*")
-            .eq("thread_id", thread_id)
-            .eq("user_id", user_id)
-            .execute()
+        updated_thread = await Threads.patch(
+            thread_id,
+            user_id=user_id,
+            metadata=body.get("metadata", {}),
+            ttl=body.get("ttl", None),
         )
-        
-        if not existing_thread_result.data:
+
+        if not updated_thread:
             logger.error(f"Thread {thread_id} not found for user {user_id}")
-            raise HTTPException(
-                status_code=404,
-                detail=f"Thread {thread_id} not found"
-            )
-        
-        existing_thread = existing_thread_result.data[0]
-        
-        # Note: updated_at is automatically set by database trigger
-        update_payload = {}
-        
-        # Merge metadata if provided
-        if metadata := body.get("metadata", None):
-            existing_metadata = existing_thread.get("metadata", {}) or {}
-            merged_metadata = {**existing_metadata, **metadata}
-            update_payload["metadata"] = merged_metadata
-        
-        # Update TTL if provided
-        if ttl := body.get("ttl", None):
-            update_payload["ttl"] = ttl
-        
-        # Perform the update
-        result = (
-            await supabase_client.table("threads")
-            .update(update_payload)
-            .eq("thread_id", thread_id)
-            .eq("user_id", user_id)
-            .execute()
-        )
-        
-        if error := getattr(result, "error", None):
-            logger.error(f"Error updating thread {thread_id}: {error}")
-            raise HTTPException(
-                status_code=500,
-                detail=f"Internal server error: {error} while updating thread"
-            )
-        
-        updated_data = result.data[0] if result.data else existing_thread
-        
-        # Convert to Thread schema
-        thread = Thread(
-            thread_id=updated_data["thread_id"],
-            created_at=updated_data["created_at"],
-            updated_at=updated_data["updated_at"],
-            metadata=updated_data.get("metadata", {}),
-            status=updated_data.get("status", "idle"),
-            values=updated_data.get("values", {}),
-            interrupts=updated_data.get("interrupts", {}),
-        )
-        
-        logger.debug(f"Thread {thread_id} updated successfully")
-        return thread
+            raise HTTPException(status_code=404, detail=f"Thread {thread_id} not found")
+
+        return updated_thread
         
     except HTTPException:
         raise
+    
     except Exception as e:
         logger.error(f"Error updating thread {thread_id}: {e}")
         raise HTTPException(
@@ -355,56 +197,76 @@ async def patch_thread(
         )
 
 
-@threads_router.delete(
-    "/{thread_id}",
-    summary="Delete a thread by ID.",
-    tags=["threads"],
-    status_code=200
-)
+@threads_router.delete("/{thread_id}", status_code=200)
 async def delete_thread(
     thread_id: str = Path(..., description="The ID of the thread"),
     user_id: str = Depends(authenticate_user),
 ):
     """Delete a thread by ID."""
-    
-    if user_id:
-        logger.debug(f"Authenticated user_id: {user_id}")
-
     try:
-        supabase_client = await get_supabase()
-        
-        # Verify thread exists and belongs to user, then delete
-        result = (
-            await supabase_client.table("threads")
-            .delete()
-            .eq("thread_id", thread_id)
-            .eq("user_id", user_id)
-            .execute()
-        )
-        
-        # If no rows were deleted, thread doesn't exist or doesn't belong to user
-        if not result.data:
-            logger.error(f"Thread {thread_id} not found for user {user_id}")
-            raise HTTPException(
-                status_code=404,
-                detail=f"Thread {thread_id} not found"
-            )
-        
-        if error := getattr(result, "error", None):
-            logger.error(f"Error deleting thread {thread_id}: {error}")
-            raise HTTPException(
-                status_code=500,
-                detail=f"Internal server error: {error} while deleting thread"
-            )
-        
-        logger.info(f"Thread {thread_id} deleted successfully by user {user_id}")
+        await Threads.delete(thread_id, user_id)
         
     except HTTPException:
         raise
+    
     except Exception as e:
         logger.error(f"Error deleting thread {thread_id}: {e}")
         raise HTTPException(
             status_code=500,
             detail=f"Internal server error: {e} while deleting thread"
         )
+
+
+@threads_router.post("/{thread_id}/copy")
+async def copy_thread(
+    thread_id: str = Path(..., description="The ID of the thread to copy"),
+    user_id: str = Depends(authenticate_user),
+) -> Thread:
+    """Create a copy of an existing thread with all its checkpoint data."""
+    try:
+        copied_thread = await Threads.copy(thread_id, user_id)
+        
+        if not copied_thread:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Thread with ID {thread_id} not found"
+            )
+        
+        return copied_thread
+        
+    except HTTPException:
+        raise
+    
+    except Exception as e:
+        logger.error(f"Error copying thread {thread_id}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Internal server error: {e} while copying thread"
+        )
+
+
+@threads_router.delete("/{thread_id}/checkpoints/{checkpoint_id}", status_code=204)
+async def delete_from_checkpoint(
+    thread_id: str = Path(..., description="The ID of the thread"),
+    checkpoint_id: str = Path(..., description="The checkpoint ID to delete from (inclusive)"),
+    user_id: str = Depends(authenticate_user),
+):
+    """Delete all checkpoints from a specific checkpoint onwards, effectively rolling back the thread.
+    
+    This will delete the specified checkpoint and all its descendants, rolling the thread back
+    to the parent of the specified checkpoint.
+    """
+    try:
+        await Threads.delete_from_checkpoint(thread_id, checkpoint_id, user_id)
+        
+    except HTTPException:
+        raise
+    
+    except Exception as e:
+        logger.error(f"Error deleting checkpoints from {checkpoint_id} in thread {thread_id}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Internal server error: {e} while deleting checkpoints"
+        )
+
 
