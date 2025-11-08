@@ -75,6 +75,7 @@ Orbit — short, clear, elegant, and helpful. 😊
 def weather_tool(location: str) -> str:
     """A simple weather tool that returns a fake weather report for a given location."""
     # In a real implementation, this would call a weather API.
+    time.sleep(5)
     return f"The current weather in {location} is sunny with a temperature of 25°C."
 
 
@@ -84,7 +85,7 @@ gemini_ai_studio = ChatGoogleGenerativeAI(
         max_retries=2,
         max_output_tokens=None,
         include_thoughts=True,
-        thinking_budget=0,
+        thinking_budget=-1,
         # Configure native Gemini tools on model creation
         # tools=[
         #     {"google_search_retrieval": {"dynamic_retrieval_config": {"mode": "MODE_DYNAMIC", "dynamic_threshold": 0.3}}}
