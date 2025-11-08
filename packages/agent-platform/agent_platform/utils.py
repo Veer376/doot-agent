@@ -9,11 +9,10 @@ import base64
 import json
 import asyncio
 from collections import defaultdict
-from langgraph_runtime_inmem.checkpoint import Checkpointer
+from orbit_core.clients.checkpointer import get_checkpointer
 
 if TYPE_CHECKING:
-    from langgraph_api.asyncio import ValueEvent
-    from langgraph_api.schema import Interrupt as InterruptSchema, DeprecatedInterrupt
+    from langgraph_sdk.schema import Interrupt as InterruptSchema
     from langchain_core.runnables.config import RunnableConfig
     from langgraph_sdk.schema import Checkpoint, ThreadState
 
@@ -22,6 +21,36 @@ from langgraph.version import __version__
 
 LANGGRAPH_PY_MINOR = tuple(map(int, __version__.split(".")[:2]))
 USE_NEW_INTERRUPTS = LANGGRAPH_PY_MINOR >= (0, 6)
+
+class ValueEvent(asyncio.Event):
+    def set(self, value: Any = True) -> None:
+        """Set the internal flag to true. All coroutines waiting for it to
+        become set are awakened. Coroutine that call wait() once the flag is
+        true will not block at all.
+        """
+        if not self._value:
+            self._value = value
+
+            for fut in self._waiters:
+                if not fut.done():
+                    fut.set_result(value)
+
+    async def wait(self):
+        """Block until the internal flag is set.
+
+        If the internal flag is set on entry, return value
+        immediately.  Otherwise, block until another coroutine calls
+        set() to set the flag, then return the value.
+        """
+        if self._value:
+            return self._value
+
+        fut = self._get_loop().create_future()
+        self._waiters.append(fut)
+        try:
+            return await fut
+        finally:
+            self._waiters.remove(fut)
 
 
 def map_cmd(cmd: dict) -> Command:
@@ -202,7 +231,7 @@ def replace_thread_id(data, new_thread_id, thread_id):
 
 def patch_interrupt(
     interrupt: Interrupt | dict,
-) -> "InterruptSchema | DeprecatedInterrupt":
+) -> "InterruptSchema":
     """Convert a langgraph interrupt (v0 or v1) to standard interrupt schema.
 
     In v0.4 and v0.5, interrupt_id is a property on the langgraph.types.Interrupt object,
@@ -362,7 +391,7 @@ def delete_checkpoints_for_thread(
     run_id: str | UUID | None = None,
 ):
     """Delete checkpoints for a thread, optionally filtering by run_id."""
-    checkpointer = Checkpointer()
+    checkpointer = get_checkpointer()
     thread_id = str(thread_id)
     if thread_id not in checkpointer.storage:
         return

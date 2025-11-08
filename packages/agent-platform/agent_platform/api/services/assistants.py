@@ -1,32 +1,21 @@
 """Assistants service - Business logic for assistant operations."""
-
 from __future__ import annotations
-
-from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
-
 import structlog
-from starlette.exceptions import HTTPException
-
+from fastapi import HTTPException
 from orbit_core.clients import get_supabase
-
-from ...utils import (
-    ensure_uuid as _ensure_uuid,
-    empty_generator as _empty_generator,
+from ...config import default_assistants
+import typing
+from langgraph_sdk.schema import (
+    Assistant,
+    AssistantSelectField,
+    Config,
+    Context,
+    OnConflictBehavior
 )
 
-import typing
-
-if typing.TYPE_CHECKING:
-    from langgraph_api.schema import (
-        Assistant,
-        AssistantSelectField,
-        Config,
-        Context,
-        MetadataInput,
-        OnConflictBehavior,
-    )
+MetadataInput = dict[str, typing.Any]
 
 logger = structlog.stdlib.get_logger(__name__)
 
@@ -43,13 +32,11 @@ class Assistants:
         sort_by: str | None = None,
         sort_order: str | None = None,
         select: list[AssistantSelectField] | None = None,
-    ) -> tuple[AsyncIterator[Assistant], int]:
+    ) -> tuple[list[Assistant], int]:
         metadata = metadata if metadata is not None else {}
 
-        # Get Supabase client
         supabase_client = await get_supabase()
 
-        # Build query
         select_fields = "*"
         if select:
             select_fields = ",".join(select)
@@ -87,24 +74,39 @@ class Assistants:
 
         # Execute query
         result = await query.execute()
-        assistants = result.data or []
-        total_count = result.count if hasattr(result, "count") else len(assistants)
-
+        db_assistants = result.data or []
+        
+        # Add default assistants
+        all_assistants = list(default_assistants.values()) + db_assistants
+        
+        # Apply graph_id filter to default assistants if specified
+        if graph_id:
+            all_assistants = [
+                a for a in all_assistants 
+                if a.get("graph_id") == graph_id
+            ]
+        
+        # Simple limit/offset on combined results
+        total_count = len(all_assistants)
+        if offset:
+            all_assistants = all_assistants[offset:]
+        if limit:
+            all_assistants = all_assistants[:limit]
+        
         cursor = offset + limit if total_count > offset + limit else None
 
-        async def assistant_iterator() -> AsyncIterator[Assistant]:
-            for assistant in assistants:
-                yield assistant
-
-        return assistant_iterator(), cursor
+        return all_assistants, cursor
 
     @staticmethod
     async def get(
         assistant_id: UUID | str,
         user_id: str,
-    ) -> AsyncIterator[Assistant]:
+    ) -> Assistant | None:
         """Get an assistant by ID."""
-        # Get Supabase client
+
+        if str(assistant_id) in default_assistants:
+            return default_assistants[str(assistant_id)]
+        
         supabase_client = await get_supabase()
 
         result = await (
@@ -115,11 +117,7 @@ class Assistants:
             .execute()
         )
 
-        async def _yield_result():
-            if result.data:
-                yield result.data[0]
-
-        return _yield_result()
+        return result.data[0] if result.data else None
 
     @staticmethod
     async def put(
@@ -133,9 +131,16 @@ class Assistants:
         if_exists: OnConflictBehavior,
         name: str,
         description: str | None = None,
-    ) -> AsyncIterator[Assistant]:
+    ) -> Assistant:
         """Insert an assistant."""
         metadata = metadata if metadata is not None else {}
+        
+        # Prevent overwriting default assistants
+        if str(assistant_id) in default_assistants:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot create assistant with ID '{assistant_id}' - this is a reserved default assistant"
+            )
 
         if config.get("configurable") and context:
             raise HTTPException(
@@ -169,11 +174,7 @@ class Assistants:
                     status_code=409, detail=f"Assistant {assistant_id} already exists"
                 )
             elif if_exists == "do_nothing":
-
-                async def _yield_existing():
-                    yield existing_assistant
-
-                return _yield_existing()
+                return existing_assistant
 
         now = datetime.now(UTC)
         new_assistant: Assistant = {
@@ -223,10 +224,7 @@ class Assistants:
             .execute()
         )
 
-        async def _yield_new():
-            yield inserted_assistant
-
-        return _yield_new()
+        return inserted_assistant
 
     @staticmethod
     async def patch(
@@ -239,7 +237,7 @@ class Assistants:
         metadata: MetadataInput | None = None,
         name: str | None = None,
         description: str | None = None,
-    ) -> AsyncIterator[Assistant]:
+    ) -> Assistant:
         """Update an assistant.
 
         Args:
@@ -255,6 +253,13 @@ class Assistants:
         Returns:
             return the updated assistant model.
         """
+        # Prevent updating default assistants
+        if str(assistant_id) in default_assistants:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot update default assistant '{assistant_id}'"
+            )
+        
         metadata = metadata if metadata is not None else {}
         config = config if config is not None else {}
 
@@ -356,17 +361,21 @@ class Assistants:
             result.data[0] if result.data else {**assistant, **update_payload}
         )
 
-        async def _yield_updated():
-            yield updated_assistant
-
-        return _yield_updated()
+        return updated_assistant
 
     @staticmethod
     async def delete(
         assistant_id: UUID,
         user_id: str,
-    ) -> AsyncIterator[UUID]:
+    ) -> UUID:
         """Delete an assistant by ID."""
+        # Prevent deleting default assistants
+        if str(assistant_id) in default_assistants:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot delete default assistant '{assistant_id}'"
+            )
+        
         # Get Supabase client
         supabase_client = await get_supabase()
 
@@ -415,22 +424,18 @@ class Assistants:
         from .runs import Runs
 
         for run in runs_result.data or []:
-            res = await Runs.delete(
+            await Runs.delete(
                 run["run_id"], thread_id=run["thread_id"], user_id=user_id
             )
-            await anext(res)
 
-        async def _yield_deleted():
-            yield assistant_id
-
-        return _yield_deleted()
+        return assistant_id
 
     @staticmethod
     async def set_latest(
         assistant_id: UUID,
         version: int,
         user_id: str,
-    ) -> AsyncIterator[Assistant]:
+    ) -> Assistant:
         """Change the version of an assistant."""
         # Get Supabase client
         supabase_client = await get_supabase()
@@ -489,10 +494,7 @@ class Assistants:
             result.data[0] if result.data else {**assistant, **update_payload}
         )
 
-        async def _yield_updated():
-            yield updated_assistant
-
-        return _yield_updated()
+        return updated_assistant
 
     @staticmethod
     async def get_versions(
@@ -501,8 +503,12 @@ class Assistants:
         limit: int,
         offset: int,
         user_id: str,
-    ) -> AsyncIterator[Assistant]:
+    ) -> list[Assistant]:
         """Get all versions of an assistant."""
+        # Default assistants have no versions, just return the single default
+        if str(assistant_id) in default_assistants:
+            return [default_assistants[str(assistant_id)]]
+        
         # Get Supabase client
         supabase_client = await get_supabase()
 
@@ -552,11 +558,7 @@ class Assistants:
             else:
                 description = v["description"]
 
-        async def _yield_versions():
-            for version in versions:
-                yield version
-
-        return _yield_versions()
+        return versions
 
     @staticmethod
     async def count(
@@ -566,6 +568,14 @@ class Assistants:
         metadata: MetadataInput = None,
     ) -> int:
         """Get count of assistants."""
+        # Count default assistants
+        default_count = len(default_assistants)
+        if graph_id:
+            default_count = sum(
+                1 for a in default_assistants.values() 
+                if a.get("graph_id") == graph_id
+            )
+        
         # Get Supabase client
         supabase_client = await get_supabase()
 
@@ -583,5 +593,6 @@ class Assistants:
 
         # Execute query
         result = await query.execute()
+        db_count = result.count if hasattr(result, "count") else 0
 
-        return result.count if hasattr(result, "count") else 0
+        return default_count + db_count

@@ -128,18 +128,11 @@ class RunCreateStateful(TypedDict, total=False):
         return getattr(self, key, default)
 
 
-@dataclass
-class ThreadStateSearch:
+class ThreadStateSearch(TypedDict, total=False):
     before: Config | None = None
     checkpoint: Checkpoint | None = None
     limit: int = 10
     metadata: Json = None
-
-    def __getitem__(self, key):
-        return getattr(self, key)
-
-    def get(self, key, default=None):
-        return getattr(self, key, default)
 
 
 class Run(TypedDict):
@@ -166,7 +159,13 @@ class Assistant:
     description: str | None = None
     name: str | None = None
     version: str | None = None
-
+    
+    def __getitem__(self, key):
+        return getattr(self, key)
+    
+    def get(self, key, default=None):
+        return getattr(self, key, default)
+    
 
 class AssistantSearchRequest(TypedDict, total=False):
     """Payload for listing assistants."""
