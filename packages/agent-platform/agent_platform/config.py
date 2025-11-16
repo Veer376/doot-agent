@@ -28,19 +28,5 @@ default_assistants = {
         updated_at = "system",
         name = "chat agent",
         description = "Your personal AI assistant that can browse the web and interact with websites on your behalf.",
-    ),
-    "supervisor_agent": Assistant(
-        "supervisor_agent",
-        config = {
-            "recursion_limit": 50,
-        },
-        graph_id = "supervisor_agent",
-        metadata = {
-            # "created_by": "system",
-        },
-        created_at = "system",
-        updated_at = "system",
-        name = "Supervisor Agent",
-        description = "Your personal AI assistant that supervises and delegates tasks to other agents.",
     )
 }

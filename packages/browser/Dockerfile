@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Install Playwright Python and browsers + system deps
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel \
-    && pip install --no-cache-dir "playwright>=1.54.0,<2" \
+    && pip install --no-cache-dir "playwright>=1.49.0,<2" \
     && playwright install --with-deps chromium
 
 # Create runtime dir for writing ws endpoint file

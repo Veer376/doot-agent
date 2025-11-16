@@ -108,6 +108,7 @@ graph = (
         tools_condition,
         {"tools": "tools", "__end__": "task_summarizer"},
     )
+    .add_edge("tools", "browser_state_updater")
     .add_edge("task_summarizer", END)
     .compile(checkpointer=get_checkpointer())
 )
