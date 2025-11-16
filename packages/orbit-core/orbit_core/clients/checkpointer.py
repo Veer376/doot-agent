@@ -10,7 +10,7 @@ from typing import Optional
 from psycopg_pool import AsyncConnectionPool
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.checkpoint.base import BaseCheckpointSaver
-
+from langgraph.checkpoint.memory import InMemorySaver
 logger = logging.getLogger("checkpointer")
 
 
@@ -74,6 +74,12 @@ def get_checkpointer() -> BaseCheckpointSaver:
     Raises:
         RuntimeError: If checkpointer hasn't been initialized with setup_checkpointer()
     """
+    import os
+    IN_DOCKER = os.getenv("IN_DOCKER", "false").lower() in ("true", "1", "yes")
+    print("IN_DOCKER:", IN_DOCKER)
+    if not IN_DOCKER:
+        return InMemorySaver()
+    
     if _checkpointer_instance is None:
         raise RuntimeError(
             "Checkpointer not initialized. Call setup_checkpointer() first, "
