@@ -113,6 +113,8 @@ class Screenshot(BrowserRepresentation):
         state_text = f"Browser: {browser_state.title}\n URL: {browser_state.url}\n"
         if len(browser_state.selector_map) == 0:
             state_text += "[No interactive elements found, looks like the page is loading.]"
+        else:
+            state_text += f"Interactive elements: {self._get_dom_text(browser_state)}"
 
         bbox_renderer = BBoxRenderer()
         # bboxes_screenshot = bbox_renderer.render_bboxes(base64_screenshot, browser_state.selector_map)

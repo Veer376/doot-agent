@@ -15,8 +15,8 @@ default_assistants = {
         name = "Orbit",
         description = "Your personal AI assistant that can browse the web and interact with websites on your behalf.",
     ),
-    "chat_mode": Assistant(
-        "chat_mode",
+    "chat_agent": Assistant(
+        "chat_agent",
         config = {
             "recursion_limit": 50,
         },
