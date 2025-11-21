@@ -3,7 +3,7 @@
     "."
   ],
   "graphs": {
-    "chat_mode": "packages/orbit-core/orbit_core/chat_mode.py:graph",
+    "chat_agent": "packages/orbit-core/orbit_core/agents/chat_agent.py:graph",
     "browser_agent": "packages/orbit-core/orbit_core/agents/browser_agent/agent.py:graph",
     "supervisor_agent": "packages/orbit-core/orbit_core/agents/supervisor_agent/agent.py:graph"
   },
