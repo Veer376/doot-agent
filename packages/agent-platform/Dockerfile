@@ -23,5 +23,5 @@ RUN pip install --upgrade pip setuptools wheel \
 # Expose port
 EXPOSE 5000
 
-# Run the FastAPI app with reload for dev
-CMD ["uvicorn", "agent_platform.api.main:app", "--host", "0.0.0.0", "--port", "5000", "--reload"]
+# Run the FastAPI app in production mode
+CMD ["uvicorn", "agent_platform.api.main:app", "--host", "0.0.0.0", "--port", "5000", "--workers", "1"]

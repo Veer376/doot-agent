@@ -1,0 +1,374 @@
+name: Deploy Backend to Cloud Run
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'packages/agent-platform/**'
+      - 'packages/browser/**'
+      - 'packages/orbit-core/**'
+      - 'langgraph.json'
+      - '.github/workflows/deploy-backend.yml'
+  workflow_dispatch:
+    inputs:
+      service:
+        description: 'Service to deploy (agent-platform, browser, or all)'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - agent-platform
+          - browser
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REGION: ${{ secrets.GCP_REGION }}
+  REGISTRY: ${{ secrets.GCP_REGISTRY }}
+  REPOSITORY: orbit-agent-repo
+
+jobs:
+  # Build and push Docker images
+  build-agent-platform:
+    name: Build Agent Platform Image
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'push' || 
+      github.event.inputs.service == 'all' || 
+      github.event.inputs.service == 'agent-platform'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: |
+          gcloud auth configure-docker ${{ env.REGISTRY }}
+
+      - name: Build and Push Agent Platform Image
+        run: |
+          IMAGE_NAME="${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/agent-platform:${{ github.sha }}"
+          IMAGE_LATEST="${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/agent-platform:latest"
+          
+          # Build image
+          docker build \
+            -f packages/agent-platform/Dockerfile \
+            -t $IMAGE_NAME \
+            -t $IMAGE_LATEST \
+            .
+          
+          # Push both tags
+          docker push $IMAGE_NAME
+          docker push $IMAGE_LATEST
+          
+          # Output for deployment job
+          echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
+          echo "agent_platform_image=$IMAGE_NAME" >> $GITHUB_OUTPUT
+        id: build-agent
+
+      - name: Save image name
+        run: |
+          echo "${{ steps.build-agent.outputs.agent_platform_image }}" > agent-platform-image.txt
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-platform-image
+          path: agent-platform-image.txt
+
+  build-browser:
+    name: Build Browser Service Image
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'push' || 
+      github.event.inputs.service == 'all' || 
+      github.event.inputs.service == 'browser'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: |
+          gcloud auth configure-docker ${{ env.REGISTRY }}
+
+      - name: Build and Push Browser Image
+        run: |
+          IMAGE_NAME="${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/browser:${{ github.sha }}"
+          IMAGE_LATEST="${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/browser:latest"
+          
+          # Build image
+          docker build \
+            -f packages/browser/Dockerfile \
+            -t $IMAGE_NAME \
+            -t $IMAGE_LATEST \
+            .
+          
+          # Push both tags
+          docker push $IMAGE_NAME
+          docker push $IMAGE_LATEST
+          
+          # Output for deployment job
+          echo "browser_image=$IMAGE_NAME" >> $GITHUB_OUTPUT
+        id: build-browser
+
+      - name: Save image name
+        run: |
+          echo "${{ steps.build-browser.outputs.browser_image }}" > browser-image.txt
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-image
+          path: browser-image.txt
+
+  # Deploy to Cloud Run
+  deploy-browser:
+    name: Deploy Browser Service
+    runs-on: ubuntu-latest
+    needs: build-browser
+    if: |
+      github.event_name == 'push' || 
+      github.event.inputs.service == 'all' || 
+      github.event.inputs.service == 'browser'
+    
+    steps:
+      - name: Download browser image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: browser-image
+
+      - name: Read image name
+        id: read-image
+        run: |
+          IMAGE_NAME=$(cat browser-image.txt)
+          echo "image=$IMAGE_NAME" >> $GITHUB_OUTPUT
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy Browser to Cloud Run
+        run: |
+          gcloud run deploy browser \
+            --image=${{ steps.read-image.outputs.image }} \
+            --platform=managed \
+            --region=${{ env.REGION }} \
+            --allow-unauthenticated \
+            --memory=2Gi \
+            --cpu=2 \
+            --timeout=300 \
+            --concurrency=10 \
+            --min-instances=0 \
+            --max-instances=5 \
+            --port=3500 \
+            --set-env-vars="PLAYWRIGHT_PORT=3500,PLAYWRIGHT_HOST=0.0.0.0" \
+            --execution-environment=gen2
+
+      - name: Get Browser Service URL
+        id: browser-url
+        run: |
+          URL=$(gcloud run services describe browser \
+            --region=${{ env.REGION }} \
+            --format='value(status.url)')
+          echo "url=$URL" >> $GITHUB_OUTPUT
+          echo "Browser Service URL: $URL"
+
+      - name: Save browser URL
+        run: |
+          echo "${{ steps.browser-url.outputs.url }}" > browser-url.txt
+
+      - name: Upload browser URL artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-url
+          path: browser-url.txt
+
+  deploy-agent-platform:
+    name: Deploy Agent Platform
+    runs-on: ubuntu-latest
+    needs: [build-agent-platform, deploy-browser]
+    if: |
+      always() &&
+      (needs.build-agent-platform.result == 'success') &&
+      (github.event_name == 'push' || 
+       github.event.inputs.service == 'all' || 
+       github.event.inputs.service == 'agent-platform')
+    
+    steps:
+      - name: Download agent-platform image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: agent-platform-image
+
+      - name: Download browser URL artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: browser-url
+        continue-on-error: true
+
+      - name: Read image name and URLs
+        id: read-values
+        run: |
+          IMAGE_NAME=$(cat agent-platform-image.txt)
+          echo "image=$IMAGE_NAME" >> $GITHUB_OUTPUT
+          
+          if [ -f browser-url.txt ]; then
+            BROWSER_URL=$(cat browser-url.txt)
+            # Convert https:// to wss:// for WebSocket
+            BROWSER_WSS_URL=$(echo $BROWSER_URL | sed 's|https://|wss://|')
+            echo "browser_wss_url=$BROWSER_WSS_URL/" >> $GITHUB_OUTPUT
+          else
+            echo "browser_wss_url=" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy Agent Platform to Cloud Run
+        run: |
+          # Build secrets list dynamically
+          SECRETS_LIST=""
+          SECRETS_LIST="$SECRETS_LIST,GOOGLE_API_KEY=GOOGLE_API_KEY:latest"
+          SECRETS_LIST="$SECRETS_LIST,GEMINI_API_KEY=GEMINI_API_KEY:latest"
+          SECRETS_LIST="$SECRETS_LIST,MODEL_PROVIDER=MODEL_PROVIDER:latest"
+          SECRETS_LIST="$SECRETS_LIST,LOG_LEVEL=LOG_LEVEL:latest"
+          SECRETS_LIST="$SECRETS_LIST,SUPABASE_URL=SUPABASE_URL:latest"
+          SECRETS_LIST="$SECRETS_LIST,SUPABASE_ANON_KEY=SUPABASE_ANON_KEY:latest"
+          SECRETS_LIST="$SECRETS_LIST,SUPABASE_SERVICE_ROLE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest"
+          SECRETS_LIST="$SECRETS_LIST,TAVILY_API_KEY=TAVILY_API_KEY:latest"
+          SECRETS_LIST="$SECRETS_LIST,COMPOSIO_API_KEY=COMPOSIO_API_KEY:latest"
+          # Remove leading comma
+          SECRETS_LIST="${SECRETS_LIST:1}"
+          
+          # Deploy with secrets and env vars
+          gcloud run deploy agent-platform \
+            --image=${{ steps.read-values.outputs.image }} \
+            --platform=managed \
+            --region=${{ env.REGION }} \
+            --allow-unauthenticated \
+            --memory=1Gi \
+            --cpu=1 \
+            --timeout=300 \
+            --concurrency=80 \
+            --min-instances=0 \
+            --max-instances=10 \
+            --port=5000 \
+            --set-secrets="$SECRETS_LIST" \
+            --set-env-vars="IN_DOCKER=true,ENV_MODE=production,BROWSER_WSS_URL=${{ steps.read-values.outputs.browser_wss_url }}" \
+            --execution-environment=gen2
+
+      - name: Get Agent Platform Service URL
+        id: agent-url
+        run: |
+          URL=$(gcloud run services describe agent-platform \
+            --region=${{ env.REGION }} \
+            --format='value(status.url)')
+          echo "url=$URL" >> $GITHUB_OUTPUT
+          echo "Agent Platform URL: $URL"
+
+  # Health check and verification
+  verify-deployment:
+    name: Verify Deployment
+    runs-on: ubuntu-latest
+    needs: [deploy-agent-platform, deploy-browser]
+    if: |
+      always() &&
+      (needs.deploy-agent-platform.result == 'success' || needs.deploy-browser.result == 'success')
+    
+    steps:
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Check Agent Platform Health
+        if: needs.deploy-agent-platform.result == 'success'
+        run: |
+          URL=$(gcloud run services describe agent-platform \
+            --region=${{ env.REGION }} \
+            --format='value(status.url)')
+          
+          echo "Testing Agent Platform at: $URL"
+          
+          # Try health endpoint with retries
+          for i in {1..5}; do
+            if curl -f -s "$URL/health" || curl -f -s "$URL/" ; then
+              echo "✓ Agent Platform is healthy"
+              exit 0
+            fi
+            echo "Attempt $i failed, retrying in 10s..."
+            sleep 10
+          done
+          
+          echo "✗ Health check failed after 5 attempts"
+          exit 1
+
+      - name: Check Browser Service Health
+        if: needs.deploy-browser.result == 'success'
+        run: |
+          URL=$(gcloud run services describe browser \
+            --region=${{ env.REGION }} \
+            --format='value(status.url)')
+          
+          echo "Testing Browser Service at: $URL"
+          
+          # Browser service should respond on root
+          for i in {1..5}; do
+            if curl -f -s "$URL" > /dev/null 2>&1; then
+              echo "✓ Browser Service is healthy"
+              exit 0
+            fi
+            echo "Attempt $i failed, retrying in 10s..."
+            sleep 10
+          done
+          
+          echo "✗ Health check failed after 5 attempts"
+          exit 1
+
+      - name: Display Deployment Summary
+        run: |
+          echo "=== Deployment Summary ==="
+          echo ""
+          gcloud run services list --region=${{ env.REGION }}
+          echo ""
+          echo "=== Service URLs ==="
+          
+          if gcloud run services describe agent-platform --region=${{ env.REGION }} &>/dev/null; then
+            AGENT_URL=$(gcloud run services describe agent-platform --region=${{ env.REGION }} --format='value(status.url)')
+            echo "Agent Platform: $AGENT_URL"
+          fi
+          
+          if gcloud run services describe browser --region=${{ env.REGION }} &>/dev/null; then
+            BROWSER_URL=$(gcloud run services describe browser --region=${{ env.REGION }} --format='value(status.url)')
+            echo "Browser Service: $BROWSER_URL"
+          fi

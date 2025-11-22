@@ -10,13 +10,10 @@ screenshots
 process_dom_test.py
 dom_tests.py
 dom.json
-gemini_hallucinations
 tests
-.github
 .langgraph_api
 langgraph_api
-orbit_agent.egg-info
-orbit_core.egg-info
+*.egg-info
 vertexai_deepseek.py
 langgraph_runtime_inmem
 test_browser_ws.py
@@ -24,3 +21,5 @@ test_browser_connection.py
 test_simple_checkpointer.py
 test_url_formats.py
 *.md
+github-sa-key.json
+test_cdp_connection.py
