@@ -41,7 +41,7 @@ async def process_run(run: Run):
             f"Run {run_id} has metadata or feedback_keys, but handling not implemented yet"
         )
 
-    input = kwargs.get("input", None)
+    input = kwargs.get("input", {})
     if cmd := kwargs.get("command", None):
         input = map_cmd(cmd)
 

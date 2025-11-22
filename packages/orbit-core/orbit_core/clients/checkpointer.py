@@ -47,7 +47,7 @@ async def setup_checkpointer(connection_string: Optional[str] = None) -> BaseChe
         min_size=1,
         max_size=10,
         open=False,
-        kwargs={"autocommit": True}
+        kwargs={"autocommit": True, "prepare_threshold": None}  # Disable prepared statements for transaction pooler
     )
     
     # Open the pool
@@ -74,12 +74,6 @@ def get_checkpointer() -> BaseCheckpointSaver:
     Raises:
         RuntimeError: If checkpointer hasn't been initialized with setup_checkpointer()
     """
-    import os
-    IN_DOCKER = os.getenv("IN_DOCKER", "false").lower() in ("true", "1", "yes")
-    print("IN_DOCKER:", IN_DOCKER)
-    if not IN_DOCKER:
-        return InMemorySaver()
-    
     if _checkpointer_instance is None:
         raise RuntimeError(
             "Checkpointer not initialized. Call setup_checkpointer() first, "
