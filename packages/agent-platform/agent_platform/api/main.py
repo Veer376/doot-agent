@@ -34,9 +34,13 @@ PROJECT_ROOT = Path(os.getenv("ORBIT_AGENT_ROOT", "/orbit-agent"))
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # startup logic - initialize clients first
-    await get_supabase()
-    await get_redis()
-    await setup_checkpointer()
+    try:
+        await get_supabase()
+        await get_redis()
+        await setup_checkpointer()
+
+    except Exception as exc:
+        logger.error("Error occured during initialisation of clients: %s", exc)
     
     # Then load graphs (which depend on checkpointer being initialized)
     try:
