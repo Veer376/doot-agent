@@ -282,6 +282,7 @@ jobs:
             --min-instances=0 \
             --max-instances=10 \
             --port=5000 \
+            --set-env-vars="ORBIT_AGENT_ROOT=/app" \
             --set-secrets="$SECRETS_LIST" \
             --set-env-vars="IN_DOCKER=true,ENV_MODE=production,BROWSER_WSS_URL=${{ steps.read-values.outputs.browser_wss_url }}" \
             --execution-environment=gen2
