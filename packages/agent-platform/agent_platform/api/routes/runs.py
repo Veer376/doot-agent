@@ -54,7 +54,7 @@ async def stream_run(
     )
 
     async def generator():
-        redis_client = get_redis()
+        redis_client = await get_redis()
         pubsub = redis_client.pubsub()
         await pubsub.subscribe(f"run:{run_id}:stream")
 

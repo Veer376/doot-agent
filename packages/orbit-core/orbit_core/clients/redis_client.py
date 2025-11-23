@@ -2,7 +2,6 @@ import redis.asyncio as redis
 import os
 import logging
 from dotenv import load_dotenv
-from upstash_redis import Redis as UpstashRedis
 
 load_dotenv()
 
@@ -10,33 +9,27 @@ logger = logging.getLogger(__name__)
 _client: redis.Redis | None = None
 
 
-def _build_client() -> redis.Redis:
-    """Build Redis client based on environment."""
-    if os.getenv("SERVERLESS", "false").lower() == "true":
-        logger.info("Connecting to Upstash Redis...")
-        try:
-            return UpstashRedis(
-                url=os.getenv("UPSTASH_REDIS_REST_URL"),
-                token=os.getenv("UPSTASH_REDIS_REST_TOKEN")
-            )
-        except Exception as e:
-            logger.error(f"Error initializing Upstash Redis client: {e}")
-            raise
-    else:
-        try:
-            return redis.from_url(
-                os.getenv("REDIS_URL"),
-                decode_responses=True
-            )
-        except Exception as e:
-            logger.error(f"Error initializing Redis client: {e}")
-            raise
+async def _build_client() -> redis.Redis:
+    """Build Redis client using TCP connection."""
+    try:
+        redis_url = os.getenv("REDIS_URL")
+        if not redis_url:
+            raise ValueError("REDIS_URL environment variable not set")
+        
+        logger.info(f"Connecting to Redis via TCP...")
+        return redis.from_url(
+            redis_url,
+            decode_responses=True
+        )
+    except Exception as e:
+        logger.error(f"Error initializing Redis client: {e}")
+        raise
 
-def get_redis() -> redis.Redis:
+async def get_redis() -> redis.Redis:
     """Get Redis client instance asynchronously."""
     global _client
     if _client is None:
-        _client = _build_client()
+        _client = await _build_client()
     return _client
 
 async def close_redis():
@@ -52,7 +45,7 @@ async def test():
     import time
     global _client
     if _client is None:
-        _client = _build_client()
+        _client = await _build_client()
     start = time.time()
     pong = await _client.ping()
     print(f"Ping response: {pong}")

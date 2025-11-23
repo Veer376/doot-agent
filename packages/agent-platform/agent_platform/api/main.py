@@ -27,21 +27,19 @@ logger = logging.getLogger("agent_platform")
 
 # Define the project root where langgraph.json lives
 # In Docker: /orbit-agent (via mount)
+# In development: defaults to current working directory
 # Can be overridden via ORBIT_AGENT_ROOT environment variable
-PROJECT_ROOT = Path(os.getenv("ORBIT_AGENT_ROOT", "/orbit-agent"))
+default_root = Path.cwd() if not os.getenv("ORBIT_AGENT_ROOT") else Path(os.getenv("ORBIT_AGENT_ROOT"))
+PROJECT_ROOT = Path(os.getenv("ORBIT_AGENT_ROOT", default_root))
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # startup logic - initialize clients first
-    try:
-        await get_supabase()
-        await get_redis()
-        await setup_checkpointer()
+    await get_supabase()
+    await get_redis()
+    await setup_checkpointer()
 
-    except Exception as exc:
-        logger.error("Error occured during initialisation of clients: %s", exc)
-    
     # Then load graphs (which depend on checkpointer being initialized)
     try:
         load_graphs_from_file(root=PROJECT_ROOT)
