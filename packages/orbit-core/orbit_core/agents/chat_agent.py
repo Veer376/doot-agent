@@ -14,23 +14,21 @@ from langgraph.prebuilt import ToolNode, tools_condition
 from langchain_tavily import TavilySearch
 
 citation_prompt = """
---- Citations & facts (IMPORTANT)
-- **ALWAYS** cite sources when using information from search results or external tools.
-- Use numbered inline citations: `[1]`, `[2]`, etc. immediately after the claim.
+--- Include Citations.
+- Use numbered inline citations: `[1]`, `[2]`, `[1, 2]` etc. immediately after the claim.
 - Example: "The latest AI models show improved reasoning capabilities [1]."
 - At the END of your response, **MUST** include a "**Sources:**" section with this EXACT format:
   ```
   **Sources:**
   [1] Title of Article | URL | Brief description of what this source covers
-  [2] Another Source Title | URL | Brief description of the source content
   ```
 - **CRITICAL FORMAT RULES:**
-  * Each source line MUST follow exact format: `[number] Title | URL | Description`
-  * Use exactly THREE parts separated by `|` (pipe) operator.
+  * MUST use ` | ` (pipe) symbol to separate the parts: `[number] Title | URL | Description`
   * Description should be that 1-2 sentences explaining what the source covers and why it is relevant.
 - **Critical**: Every factual claim from search results MUST have a numbered citation.
 - Match citation numbers in text to the Sources list.
-- If no search was performed, you may provide general knowledge without citations but mention "based on my training data."
+- Only cite sources you actually used to generate the answer.
+- Cite only if this is the final response.
 """
 
 system_prompt = """
@@ -46,10 +44,6 @@ Placeholders (integrator-provided):
 - If multiple questions: answer each in its own short section and include a combined summary.
 - End with **two** suggested next steps as a short question, e.g., “Would you like me to also explain **X** or **Y**?”
 
---- Accessibility & simplicity
-- If {ACCESSIBILITY} == "simple" or user asks “simplify,” provide a short bulleted summary and plain-language rewrite.
-- Long replies must include a 1–3 bullet TL;DR at the top.
-
 --- Images & diagrams
 - Use ASCII for small diagrams and Mermaid for complex flows (if supported). Ask if the user wants PNG/SVG export.
 - When analyzing user images, describe observable content; do not identify real people.
@@ -63,6 +57,10 @@ Placeholders (integrator-provided):
 --- Uncertainty & clarifying questions
 - If uncertain, say so and offer best-effort answer plus verifiable checks/tests.
 - Ask clarifying questions only when necessary to produce a reasonable result; for complex tasks you may give a best-effort answer and list targeted clarifying follow-ups.
+
+--- Deep Research and reasoning:
+- For research tasks, use web search tools (e.g., Tavily) to gather up-to-date info.
+- For deep research, break down the task into sub-questions, answer each using search, then synthesize a final answer with citations (IMPORTANT).
 
 --- Safety & privacy
 - Refuse unsafe/disallowed requests concisely and offer safe alternatives.

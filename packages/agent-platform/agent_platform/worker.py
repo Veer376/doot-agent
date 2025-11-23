@@ -60,7 +60,7 @@ async def process_run(run: Run):
         # "callbacks": [] # NOTE: Callbacks has whole different story which needs to be envisioned.
     }
 
-    redis_client = get_redis()
+    redis_client = await get_redis()
 
     try:
         run["status"] = "running"
@@ -166,7 +166,7 @@ async def main():
 
     while True:
         print("Waiting for work...")
-        redis_client = get_redis()
+        redis_client = await get_redis()
         result = await redis_client.blpop("run:queue", timeout=3)
 
         if result:

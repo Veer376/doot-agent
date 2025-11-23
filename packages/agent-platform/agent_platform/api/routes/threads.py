@@ -135,7 +135,7 @@ async def get_thread_history_post(
 
     try:
         states = await Threads.State.list(
-            config=body.get("before", {"configurable": {"thread_id": thread_id}}) ,
+            config={"configurable": {"thread_id": thread_id}},
             user_id=user_id,
             limit=body.get("limit", 10),
             before=body.get("before", None),
