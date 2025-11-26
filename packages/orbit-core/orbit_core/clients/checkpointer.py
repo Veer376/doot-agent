@@ -41,13 +41,21 @@ async def setup_checkpointer(connection_string: Optional[str] = None) -> BaseChe
     if not conn_str:
         raise ValueError("POSTGRES_URL environment variable not set")
     
-    # Create psycopg connection pool
+    # Create psycopg connection pool with shorter idle timeout to prevent stale connections
     _connection_pool = AsyncConnectionPool(
         conn_str,
-        min_size=1,
-        max_size=10,
+        min_size=1,  # Reduce minimum connections
+        max_size=20,
+        max_waiting=20,
+        max_lifetime=1800,  # 30 minutes (shorter than server timeout)
+        max_idle=300,  # 5 minutes (prevent idle connection timeouts)
+        reconnect_timeout=30,
         open=False,
-        kwargs={"autocommit": True, "prepare_threshold": None}  # Disable prepared statements for transaction pooler
+        kwargs={
+            "autocommit": True, 
+            "prepare_threshold": None,  # Disable prepared statements for transaction pooler
+        },
+        check=AsyncConnectionPool.check_connection  # Validate connections before use
     )
     
     # Open the pool
