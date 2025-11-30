@@ -30,24 +30,24 @@ services:
     networks:
       - orbit
 
-  browser:
-    build:
-      context: .
-      dockerfile: packages/browser/Dockerfile
-    environment:
-      - PLAYWRIGHT_PORT=3500
-      - PUBLIC_HOST=browser
-    ports:
-      - "3500:3500"
-    shm_size: "1gb"
-    healthcheck:
-      test: ["CMD-SHELL", "test -s ${WS_ENDPOINT_FILE:-/var/run/playwright-ws-endpoint}"]
-      interval: 5s
-      timeout: 5s
-      retries: 30
-    restart: unless-stopped
-    networks:
-      - orbit
+  # browser:
+  #   build:
+  #     context: .
+  #     dockerfile: packages/browser/Dockerfile
+  #   environment:
+  #     - PLAYWRIGHT_PORT=3500
+  #     - PUBLIC_HOST=browser
+  #   ports:
+  #     - "3500:3500"
+  #   shm_size: "1gb"
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "test -s ${WS_ENDPOINT_FILE:-/var/run/playwright-ws-endpoint}"]
+  #     interval: 5s
+  #     timeout: 5s
+  #     retries: 30
+  #   restart: unless-stopped
+  #   networks:
+  #     - orbit
 
   # Development variant with hot reload and bind mounts
   api-dev:
@@ -59,8 +59,8 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
-      browser:
-        condition: service_healthy
+      # browser:
+      #   condition: service_healthy
     env_file:
       - ./.env
     environment:
