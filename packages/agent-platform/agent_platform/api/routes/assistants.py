@@ -2,7 +2,6 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Path
 from typing import Optional, Dict, Any, List
 from pydantic import BaseModel, Field
 from ...schema import AssistantSearchRequest, Assistant
-from ...config import assistants
 from ...graph import get_graph
 from ...utils import state_jsonschema, get_configurable_jsonschema
 from ..utils import authenticate_user, get_user_optional
