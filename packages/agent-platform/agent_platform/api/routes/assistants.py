@@ -2,10 +2,10 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Path
 from typing import Optional, Dict, Any, List
 from pydantic import BaseModel, Field
 from ...schema import AssistantSearchRequest, Assistant
-from ...config import default_assistants
+from ...config import assistants
 from ...graph import get_graph
 from ...utils import state_jsonschema, get_configurable_jsonschema
-from ..utils import authenticate_user
+from ..utils import authenticate_user, get_user_optional
 from ..services.assistants import Assistants
 import logging
 
@@ -16,7 +16,7 @@ assistants_router = APIRouter(prefix="/assistants")
 @assistants_router.post("/search")
 async def search_assistants(
     body: AssistantSearchRequest = Body(...),
-    user_id: str = Depends(authenticate_user),
+    user_id: Optional[str] = Depends(get_user_optional),
 ):
     """Search for assistants. This endpoint also functions as the endpoint to list all assistants."""
     try:

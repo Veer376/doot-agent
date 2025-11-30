@@ -1,6 +1,6 @@
 from .schema import Assistant
 
-default_assistants = {
+system_assistants = {
     "browser_agent": Assistant(
         "browser_agent",
         config = {
@@ -8,7 +8,7 @@ default_assistants = {
         },
         graph_id = "browser_agent",
         metadata = {
-            "is_default": True,
+            "is_primary": True,
         },
         created_at = "system",
         updated_at = "system",
@@ -22,7 +22,7 @@ default_assistants = {
         },
         graph_id = "browser_agent",
         metadata = {
-            "is_primary": True,
+            "is_template": True,
         },
         created_at = "system",
         updated_at = "system",

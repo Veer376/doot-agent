@@ -5,7 +5,7 @@ from uuid import UUID, uuid4
 import structlog
 from fastapi import HTTPException
 from orbit_core.clients import get_supabase
-from ...config import default_assistants
+from ...config import system_assistants
 import typing
 from langgraph_sdk.schema import (
     Assistant,
@@ -24,7 +24,7 @@ class Assistants:
     @staticmethod
     async def search(
         *,
-        user_id: str,
+        user_id: str | None,
         graph_id: str | None,
         metadata: MetadataInput,
         limit: int,
@@ -35,6 +35,28 @@ class Assistants:
     ) -> tuple[list[Assistant], int]:
         metadata = metadata if metadata is not None else {}
 
+        # If no user_id (unauthenticated), return only system/default agents
+        if user_id is None:
+            all_assistants = list(system_assistants.values())
+            
+            # Apply graph_id filter if specified
+            if graph_id:
+                all_assistants = [
+                    a for a in all_assistants 
+                    if a.get("graph_id") == graph_id
+                ]
+            
+            # Simple limit/offset
+            total_count = len(all_assistants)
+            if offset:
+                all_assistants = all_assistants[offset:]
+            if limit:
+                all_assistants = all_assistants[:limit]
+            
+            cursor = offset + limit if total_count > offset + limit else None
+            return all_assistants, cursor
+
+        # Authenticated user: return both system and user agents
         supabase_client = await get_supabase()
 
         select_fields = "*"
@@ -77,7 +99,7 @@ class Assistants:
         db_assistants = result.data or []
         
         # Add default assistants
-        all_assistants = list(default_assistants.values()) + db_assistants
+        all_assistants = list(system_assistants.values()) + db_assistants
         
         # Apply graph_id filter to default assistants if specified
         if graph_id:
@@ -104,8 +126,8 @@ class Assistants:
     ) -> Assistant | None:
         """Get an assistant by ID."""
 
-        if str(assistant_id) in default_assistants:
-            return default_assistants[str(assistant_id)]
+        if str(assistant_id) in system_assistants:
+            return system_assistants[str(assistant_id)]
         
         supabase_client = await get_supabase()
 
@@ -136,7 +158,7 @@ class Assistants:
         metadata = metadata if metadata is not None else {}
         
         # Prevent overwriting default assistants
-        if str(assistant_id) in default_assistants:
+        if str(assistant_id) in system_assistants:
             raise HTTPException(
                 status_code=400,
                 detail=f"Cannot create assistant with ID '{assistant_id}' - this is a reserved default assistant"
@@ -254,7 +276,7 @@ class Assistants:
             return the updated assistant model.
         """
         # Prevent updating default assistants
-        if str(assistant_id) in default_assistants:
+        if str(assistant_id) in system_assistants:
             raise HTTPException(
                 status_code=400,
                 detail=f"Cannot update default assistant '{assistant_id}'"
@@ -370,7 +392,7 @@ class Assistants:
     ) -> UUID:
         """Delete an assistant by ID."""
         # Prevent deleting default assistants
-        if str(assistant_id) in default_assistants:
+        if str(assistant_id) in system_assistants:
             raise HTTPException(
                 status_code=400,
                 detail=f"Cannot delete default assistant '{assistant_id}'"
@@ -506,8 +528,8 @@ class Assistants:
     ) -> list[Assistant]:
         """Get all versions of an assistant."""
         # Default assistants have no versions, just return the single default
-        if str(assistant_id) in default_assistants:
-            return [default_assistants[str(assistant_id)]]
+        if str(assistant_id) in system_assistants:
+            return [system_assistants[str(assistant_id)]]
         
         # Get Supabase client
         supabase_client = await get_supabase()
@@ -569,10 +591,10 @@ class Assistants:
     ) -> int:
         """Get count of assistants."""
         # Count default assistants
-        default_count = len(default_assistants)
+        default_count = len(system_assistants)
         if graph_id:
             default_count = sum(
-                1 for a in default_assistants.values() 
+                1 for a in system_assistants.values() 
                 if a.get("graph_id") == graph_id
             )
         

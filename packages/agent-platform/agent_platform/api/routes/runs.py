@@ -1,7 +1,7 @@
 """API routes for managing runs, including streaming run outputs.
 For the runs particular we are looking to use the business logic."""
 
-from fastapi import APIRouter, Header, Query, BackgroundTasks, Request, Body, Path
+from fastapi import APIRouter, Header, Query, BackgroundTasks, Request, Body, Path, Depends
 from fastapi.responses import StreamingResponse
 import time
 import uuid
@@ -10,6 +10,7 @@ import json
 from typing import Optional, Dict, Any, List
 from orbit_core.clients.redis_client import get_redis
 from ...schema import RunCreateStateful, Run
+from ..utils import authenticate_user
 from ...worker import process_run
 from pydantic import BaseModel, Field
 import logging
@@ -23,7 +24,7 @@ runs_router = APIRouter()
     tags=["threads", "runs"],
 )
 async def stream_run(
-    # user_id: str = Depends(authenticate_user),
+    user_id: str = Depends(authenticate_user),
     thread_id: str = Path(...),
     body: RunCreateStateful = Body(...),
 ):
@@ -48,7 +49,7 @@ async def stream_run(
                 multitask_strategy=body.pop("multitask_strategy", "enqueue"),
                 created_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                 updated_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                kwargs={**body},  # Always include kwargs after popping Run fields.
+                kwargs={"user_id": user_id, **body},  # Always include kwargs after popping Run fields.
             )
         )
     )

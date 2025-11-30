@@ -14,7 +14,7 @@ def run_command(cmd, input_data=None, capture_output=True):
             result = subprocess.run(
                 cmd,
                 shell=True,
-                input=input_data.encode(),
+                input=input_data,
                 check=True,
                 capture_output=capture_output,
                 text=True

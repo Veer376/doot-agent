@@ -77,3 +77,29 @@ async def authenticate_user(request: Request) -> str:
         pass
 
     return user_uuid
+
+
+async def get_user_optional(request: Request) -> Optional[str]:
+    """Dependency to optionally get the user_id from token.
+
+    - Returns user_id if valid token is present
+    - Returns None if no token or invalid token (does NOT raise 401)
+    """
+    token = _extract_bearer_token(request)
+    if not token:
+        return None
+
+    try:
+        parts = token.split(".")
+        if len(parts) < 2:
+            return None
+        payload_raw = _b64url_decode(parts[1])
+        payload = json.loads(payload_raw.decode("utf-8"))
+        sub = payload.get("sub")
+        if not sub:
+            return None
+        # validate UUID format
+        user_uuid = str(uuid.UUID(str(sub)))
+        return user_uuid
+    except Exception:
+        return None

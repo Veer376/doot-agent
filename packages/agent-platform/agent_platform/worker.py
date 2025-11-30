@@ -59,6 +59,10 @@ async def process_run(run: Run):
         # "run_id": run_id
         # "callbacks": [] # NOTE: Callbacks has whole different story which needs to be envisioned.
     }
+    context = kwargs.get("context", {})
+    
+    if user_id := kwargs.get("user_id", None):
+        context["user_id"] = user_id
 
     redis_client = await get_redis()
 
@@ -68,7 +72,7 @@ async def process_run(run: Run):
         async for stream_mode, chunk in graph.astream(
             input=input,
             config=config,
-            context=kwargs.get("context", {}),
+            context=context,
             stream_mode=["messages", "values", "updates"],
             interrupt_after=kwargs.get("interrupt_after", None),
             interrupt_before=kwargs.get("interrupt_before", None),

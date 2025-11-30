@@ -107,7 +107,7 @@ app.include_router(runs_router)
 # Main startup
 if __name__ == "__main__":
     uvicorn.run(
-        "agent_platform.app.api.main:app",
+        "agent_platform.api.main:app",
         host="0.0.0.0",
         port=5000,
         reload=False if sys.platform == "win32" else True,

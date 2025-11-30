@@ -177,7 +177,11 @@ python upload-secrets.py
 - ✅ TAVILY_API_KEY
 - ✅ COMPOSIO_API_KEY
 
-**Note:** The `upload-secrets.py` script automatically grants the service account access to all secrets. No manual IAM binding needed.
+**Note:** The `upload-secrets.py` script automatically grants **both service accounts** access to all secrets:
+- GitHub Actions SA: `github-actions-sa@orbit-agent.iam.gserviceaccount.com` (for deployments)
+- Cloud Run SA: `642172129546-compute@developer.gserviceaccount.com` (for runtime access)
+
+No manual IAM binding needed!
 
 ---
 
