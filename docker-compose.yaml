@@ -79,6 +79,7 @@ services:
     command: ["uvicorn", "agent_platform.api.main:app", "--host", "0.0.0.0", "--port", "5000", "--reload", "--reload-dir", "/app/packages/agent-platform", "--reload-dir", "/app/packages/orbit-core"]
     ports:
       - "5000:5000"
+      - "50000-50010:50000-50010/udp"
     restart: unless-stopped
     networks:
       - orbit

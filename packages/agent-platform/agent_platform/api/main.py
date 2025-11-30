@@ -12,16 +12,31 @@ from pathlib import Path
 from .routes.runs import runs_router
 from .routes.threads import threads_router
 from .routes.assistants import assistants_router
+from .routes.webrtc import webrtc_router
 from orbit_core.utils.logging_config import setup_logging
 from contextlib import asynccontextmanager
 from orbit_core.clients import get_supabase, close_supabase, get_redis, close_redis
 from orbit_core.clients.checkpointer import setup_checkpointer, close_checkpointer
 from ..graph import load_graphs_from_file, GraphRegistryError
+from ..browser_registry import browser_registry
 
-# Ensure asyncio subprocess support on Windows for Playwright by using the Selector policy
-# Must be set at import time before any event loop is created (e.g., before uvicorn starts)
-if sys.platform == "win32" and hasattr(asyncio, "WindowsSelectorEventLoopPolicy"):
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+"""Main FastAPI application entrypoint.
+
+Important Windows note:
+Playwright launches a helper process. On Windows, only the Proactor event loop supports
+asyncio subprocess APIs. If you force the Selector loop (WindowsSelectorEventLoopPolicy)
+you will get `NotImplementedError` from `_make_subprocess_transport` when Playwright
+attempts to start.
+
+So we explicitly set the Proactor policy early, before any loop is created.
+"""
+
+if sys.platform == "win32":
+    try:
+        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+    except AttributeError:
+        # Fallback: older Python versions (<3.8) might not have Proactor policy
+        pass
 
 logger = logging.getLogger("agent_platform")
 
@@ -51,9 +66,25 @@ async def lifespan(app: FastAPI):
         logger.error("Unexpected error during graph registry init: %s", exc)
         pass
 
+    # Initialize a test browser session
+    # Use BROWSER_WSS_URL from env, default to localhost:3500 for development
+    browser_wss_url = os.environ.get("BROWSER_WSS_URL", "ws://localhost:3500")
+    logger.info(f"Initializing test browser session (WSS: {browser_wss_url})")
+    
+    # Explicitly set the WSS URL in the registry
+    browser_registry.set_wss_url(browser_wss_url)
+    
+    try:
+        await browser_registry.create_session("test_user", initial_url="https://www.google.com")
+        logger.info("Test browser session created successfully")
+    except Exception as exc:
+        logger.error(f"Failed to create test browser session: {exc}")
+        # Don't fail startup, just log the error
+    
     yield
 
     # shutdown logic
+    await browser_registry.close_all()
     await close_checkpointer()
     await close_supabase()
     await close_redis()
@@ -103,6 +134,7 @@ async def health_check():
 app.include_router(threads_router)
 app.include_router(assistants_router)
 app.include_router(runs_router)
+app.include_router(webrtc_router)
 
 # Main startup
 if __name__ == "__main__":
