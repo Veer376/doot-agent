@@ -151,6 +151,7 @@ async def get_thread_history_post(
         if not thread_states:
             logger.warning(f"No states found for thread {thread_id}")
         
+        logger.info(f"Fetched {len(thread_states)} states for thread {thread_id}")
         return thread_states
     
     except HTTPException:

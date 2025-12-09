@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: doot-agent
+  labels:
+    name: orbit-agent
+    environment: production

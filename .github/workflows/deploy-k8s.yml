@@ -1,0 +1,322 @@
+name: Deploy to Kubernetes
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'packages/agent-platform/**'
+      - 'packages/browser/**'
+      - 'packages/browser-manager/**'
+      - 'packages/orbit-core/**'
+      - 'k8s/**'
+      - '.github/workflows/deploy-k8s.yml'
+  workflow_dispatch:
+    inputs:
+      service:
+        description: 'Service to deploy (all, agent-platform, browser, browser-manager)'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - agent-platform
+          - browser
+          - browser-manager
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  GKE_CLUSTER: ${{ secrets.GKE_CLUSTER_NAME }}
+  GKE_ZONE: ${{ secrets.GKE_ZONE }}
+  REGISTRY: ${{ secrets.GCP_REGISTRY }}
+  REPOSITORY: doot-agent-repo
+
+jobs:
+  # Job 1: Build browser-manager image
+  build-browser-manager:
+    name: Build Browser Manager Image
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'push' || 
+      github.event.inputs.service == 'all' || 
+      github.event.inputs.service == 'browser-manager'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: |
+          gcloud auth configure-docker ${{ env.REGISTRY }}
+
+      - name: Build and Push Browser Manager Image
+        run: |
+          IMAGE_NAME="${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/browser-manager:${{ github.sha }}"
+          IMAGE_LATEST="${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/browser-manager:latest"
+          
+          # Build image
+          docker build \
+            -f packages/browser-manager/Dockerfile \
+            -t $IMAGE_NAME \
+            -t $IMAGE_LATEST \
+            packages/browser-manager
+          
+          # Push both tags
+          docker push $IMAGE_NAME
+          docker push $IMAGE_LATEST
+          
+          echo "browser_manager_image=$IMAGE_NAME" >> $GITHUB_OUTPUT
+        id: build
+
+      - name: Save image name
+        run: |
+          echo "${{ steps.build.outputs.browser_manager_image }}" > browser-manager-image.txt
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-manager-image
+          path: browser-manager-image.txt
+
+  # Job 2: Build agent-platform image
+  build-agent-platform:
+    name: Build Agent Platform Image
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'push' || 
+      github.event.inputs.service == 'all' || 
+      github.event.inputs.service == 'agent-platform'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: |
+          gcloud auth configure-docker ${{ env.REGISTRY }}
+
+      - name: Build and Push Agent Platform Image
+        run: |
+          IMAGE_NAME="${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/agent-platform:${{ github.sha }}"
+          IMAGE_LATEST="${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/agent-platform:latest"
+          
+          docker build \
+            -f packages/agent-platform/Dockerfile \
+            -t $IMAGE_NAME \
+            -t $IMAGE_LATEST \
+            .
+          
+          docker push $IMAGE_NAME
+          docker push $IMAGE_LATEST
+
+  # Job 3: Build browser image
+  build-browser:
+    name: Build Browser Service Image
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'push' || 
+      github.event.inputs.service == 'all' || 
+      github.event.inputs.service == 'browser'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: |
+          gcloud auth configure-docker ${{ env.REGISTRY }}
+
+      - name: Build and Push Browser Image
+        run: |
+          IMAGE_NAME="${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/browser:${{ github.sha }}"
+          IMAGE_LATEST="${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/browser:latest"
+          
+          docker build \
+            -f packages/browser/Dockerfile \
+            -t $IMAGE_NAME \
+            -t $IMAGE_LATEST \
+            .
+          
+          docker push $IMAGE_NAME
+          docker push $IMAGE_LATEST
+
+  # Job 4: Deploy to Kubernetes
+  deploy-to-k8s:
+    name: Deploy to GKE
+    runs-on: ubuntu-latest
+    needs: [build-browser-manager, build-agent-platform, build-browser]
+    if: always() && (needs.build-browser-manager.result == 'success' || needs.build-agent-platform.result == 'success' || needs.build-browser.result == 'success')
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure kubectl
+        run: |
+          gcloud container clusters get-credentials ${{ env.GKE_CLUSTER }} \
+            --zone ${{ env.GKE_ZONE }} \
+            --project ${{ env.PROJECT_ID }}
+
+      - name: Verify kubectl connection
+        run: |
+          kubectl cluster-info
+          kubectl get nodes
+
+      - name: Apply namespace
+        run: |
+          kubectl apply -f k8s/namespace.yaml
+
+      - name: Deploy browser-manager
+        if: |
+          needs.build-browser-manager.result == 'success' &&
+          (github.event.inputs.service == 'all' || 
+           github.event.inputs.service == 'browser-manager' ||
+           github.event_name == 'push')
+        run: |
+          # Update image in deployment with latest SHA
+          kubectl set image deployment/browser-manager \
+            browser-manager=${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/browser-manager:${{ github.sha }} \
+            -n doot-agent || \
+          (
+            # If deployment doesn't exist, apply all manifests
+            kubectl apply -f k8s/namespace.yaml
+            kubectl apply -f k8s/browser-manager-rbac.yaml
+            kubectl apply -f k8s/browser-manager-secret.yaml
+            kubectl apply -f k8s/browser-manager-deployment.yaml
+          )
+          
+          # Wait for rollout
+          kubectl rollout status deployment/browser-manager -n doot-agent --timeout=5m
+
+      - name: Deploy agent-platform
+        if: |
+          needs.build-agent-platform.result == 'success' &&
+          (github.event.inputs.service == 'all' || 
+           github.event.inputs.service == 'agent-platform' ||
+           github.event_name == 'push')
+        run: |
+          kubectl set image deployment/agent-platform \
+            agent-platform=${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/agent-platform:${{ github.sha }} \
+            -n doot-agent || \
+          (
+            kubectl apply -f k8s/agent-platform/
+          )
+          
+          kubectl rollout status deployment/agent-platform -n doot-agent --timeout=5m
+
+      - name: Deploy browser service
+        if: |
+          needs.build-browser.result == 'success' &&
+          (github.event.inputs.service == 'all' || 
+           github.event.inputs.service == 'browser' ||
+           github.event_name == 'push')
+        run: |
+          kubectl set image deployment/browser \
+            browser=${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/browser:${{ github.sha }} \
+            -n doot-agent || \
+          (
+            kubectl apply -f k8s/browser/
+          )
+          
+          kubectl rollout status deployment/browser -n doot-agent --timeout=5m
+
+      - name: Verify deployments
+        run: |
+          echo "=== Pods Status ==="
+          kubectl get pods -n doot-agent
+          
+          echo ""
+          echo "=== Services ==="
+          kubectl get services -n doot-agent
+          
+          echo ""
+          echo "=== Deployments ==="
+          kubectl get deployments -n doot-agent
+
+  # Job 5: Health checks
+  health-check:
+    name: Health Check
+    runs-on: ubuntu-latest
+    needs: deploy-to-k8s
+    if: needs.deploy-to-k8s.result == 'success'
+    
+    steps:
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure kubectl
+        run: |
+          gcloud container clusters get-credentials ${{ env.GKE_CLUSTER }} \
+            --zone ${{ env.GKE_ZONE }} \
+            --project ${{ env.PROJECT_ID }}
+
+      - name: Port-forward and test browser-manager
+        run: |
+          # Port forward in background
+          kubectl port-forward -n doot-agent svc/browser-manager 8000:8000 &
+          PF_PID=$!
+          
+          # Wait for port-forward to be ready
+          sleep 5
+          
+          # Test health endpoint
+          for i in {1..5}; do
+            if curl -f http://localhost:8000/health; then
+              echo "✓ Browser Manager is healthy"
+              kill $PF_PID
+              exit 0
+            fi
+            echo "Attempt $i failed, retrying..."
+            sleep 5
+          done
+          
+          kill $PF_PID
+          echo "✗ Health check failed"
+          exit 1
+
+      - name: Display deployment summary
+        if: always()
+        run: |
+          echo "=== Final Deployment Status ==="
+          kubectl get all -n doot-agent
+          
+          echo ""
+          echo "=== Recent Events ==="
+          kubectl get events -n doot-agent --sort-by='.lastTimestamp' | tail -20

@@ -5,8 +5,6 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0 \
     PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
     WS_ENDPOINT_FILE=/var/run/playwright-ws-endpoint \
-    PLAYWRIGHT_PORT=3500 \
-    PLAYWRIGHT_HOST=0.0.0.0 \
     DISPLAY=:0
 
 # Install system dependencies including VNC stack
@@ -23,6 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xfonts-base \
     supervisor \
     net-tools \
+    socat \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Playwright Python and browsers + system deps
@@ -41,17 +40,22 @@ RUN mkdir -p /var/run && chmod 777 /var/run
 # Create fluxbox config directory and basic init file
 RUN mkdir -p /root/.fluxbox && \
     echo "session.screen0.toolbar.visible: false" > /root/.fluxbox/init && \
-    echo "session.screen0.slit.autoHide: true" >> /root/.fluxbox/init
+    echo "session.screen0.slit.autoHide: true" >> /root/.fluxbox/init && \
+    echo "session.screen0.defaultDeco: NONE" >> /root/.fluxbox/init && \
+    echo "session.screen0.tabs.usePixmap: false" >> /root/.fluxbox/init && \
+    echo "[app] (name=chromium) [Deco] {NONE}" > /root/.fluxbox/apps && \
+    echo "[app] (name=chrome) [Deco] {NONE}" >> /root/.fluxbox/apps && \
+    echo "[app] (class=Chromium) [Deco] {NONE}" >> /root/.fluxbox/apps && \
+    echo "[app] (class=Google-chrome) [Deco] {NONE}" >> /root/.fluxbox/apps
 
 WORKDIR /app
 
 # Copy supervisor config and server
-COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
-COPY browser/server.py /app/server.py
-COPY browser/kiosk_browser.py /app/kiosk_browser.py
+COPY packages/browser/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+COPY packages/browser/browser/server.py /app/server.py
 
-# Expose ports: Playwright WS, VNC, noVNC web
-EXPOSE 3500 5900 6080
+# Expose ports: CDP, VNC, noVNC web
+EXPOSE 9223 5900 6080
 
 # Start all services via supervisor
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]

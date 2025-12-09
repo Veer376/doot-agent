@@ -9,6 +9,7 @@ system_assistants = {
         graph_id = "browser_agent",
         metadata = {
             "is_primary": True,
+            "icon": "doot"
         },
         created_at = "system",
         updated_at = "system",
@@ -22,7 +23,7 @@ system_assistants = {
         },
         graph_id = "browser_agent",
         metadata = {
-            "is_template": True,
+            # "is_template": True,
         },
         created_at = "system",
         updated_at = "system",

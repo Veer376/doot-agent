@@ -1,5 +1,5 @@
 """
-Test script to connect to Playwright server in Docker and navigate to Google
+Test script to connect to Playwright CDP server in Docker and navigate to Google
 The browser will display in Docker's virtual screen visible via noVNC
 """
 import asyncio
@@ -8,32 +8,38 @@ from pathlib import Path
 
 
 async def test_browser_control():
-    print("🔌 Connecting to Playwright server in Docker...")
+    print("🔌 Connecting to Playwright CDP server in Docker...")
     
     browser = None
-    context = None
     
     try:
         async with async_playwright() as p:
-            # Connect to the remote Playwright server running in Docker
-            # Note: When connecting to run-server, browser is already launched by the server
-            browser = await p.chromium.connect("ws://localhost:3500/")
-            print("✅ Connected to Playwright server!")
+            # Connect to the remote CDP endpoint running in Docker
+            # The server launches Chromium with --remote-debugging-port=9222
+            # Socat forwards 0.0.0.0:9223 -> localhost:9222 for external access
+            print("📡 Connecting to CDP endpoint: http://localhost:9223")
+            browser = await p.chromium.connect_over_cdp("http://localhost:9223")
+            print("✅ Connected to CDP server!")
             
-            # Get or create browser context
-            # The server manages the browser, we just use contexts
+            # CDP connections provide default context and pages
             contexts = browser.contexts
             if contexts:
                 context = contexts[0]
-                print(f"📄 Using existing context (found {len(contexts)} contexts)")
+                print(f"📄 Using default context (found {len(contexts)} contexts)")
+                pages = context.pages
+                if pages:
+                    page = pages[0]
+                    print(f"📄 Using existing page (found {len(pages)} pages)")
+                else:
+                    page = await context.new_page()
+                    print("📄 New page created")
             else:
+                # Fallback: create new context if none exists
                 context = await browser.new_context(
                     viewport={'width': 1280, 'height': 720}
                 )
-                print("📄 New context created")
-            
-            page = await context.new_page()
-            print("📄 New page created")
+                page = await context.new_page()
+                print("📄 New context and page created")
             
             # Navigate to Google
             print("🌐 Navigating to https://www.google.com...")
@@ -67,17 +73,10 @@ async def test_browser_control():
             
     finally:
         # Ensure proper cleanup
-        if context:
-            try:
-                await context.close()
-                print("✅ Context closed")
-            except Exception as e:
-                print(f"⚠️ Error closing context: {e}")
-        
         if browser:
             try:
                 await browser.close()
-                print("✅ Browser closed")
+                print("✅ Browser connection closed")
             except Exception as e:
                 print(f"⚠️ Error closing browser: {e}")
         

@@ -13,7 +13,6 @@ import time
 from langgraph.types import interrupt
 from langgraph.prebuilt import ToolNode, tools_condition
 from langchain_tavily import TavilySearch
-from orbit_core.composio.client import get_composio_client
 
 citation_prompt = """
 --- Include Citations.
@@ -80,7 +79,7 @@ tavily_search = TavilySearch(
 )
 
 llm = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
+        model="gemini-2.5-flash-lite",
         temperature=1,
         max_retries=2,
         max_output_tokens=None,
@@ -172,12 +171,6 @@ async def model_node(state: State, *, runtime: Runtime[Context]):
     # Start with base tools
     tools = [tavily_search]
     
-    # # Add Composio tools from runtime context
-    composio_tools = get_composio_tools_from_runtime(runtime)
-    if composio_tools:
-        tools.extend(composio_tools)
-        logger.info(f"Using {len(tools)} tools ({len(composio_tools)} from Composio)")
-    
     response = await llm.bind_tools(tools).ainvoke(
         [SystemMessage(content=full_system_prompt)] + state["messages"][-5:]
     )
@@ -188,11 +181,6 @@ async def tools_node(state: State, *, runtime: Runtime[Context]):
     """Tool node with dynamic tool loading from runtime context."""
     # Get base tools
     tools = [tavily_search]
-    
-    # Add Composio tools from runtime context
-    composio_tools = get_composio_tools_from_runtime(runtime)
-    if composio_tools:
-        tools.extend(composio_tools)
     
     # Use ToolNode with all available tools
     tool_executor = ToolNode(tools=tools)

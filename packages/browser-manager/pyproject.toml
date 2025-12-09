@@ -1,0 +1,21 @@
+[project]
+name = "browser-manager"
+version = "0.1.0"
+description = "Kubernetes-native browser orchestration service for Orbit Agent"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+    "kubernetes>=31.0.0",
+    "playwright>=1.49.0",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["browser_manager*"]

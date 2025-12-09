@@ -1,61 +1,87 @@
+"""
+Playwright browser server that launches Chromium with CDP endpoint
+The browser will display in Docker's virtual screen visible via noVNC
+"""
 import asyncio
-import os
-import re
+import signal
 import sys
-
-PORT = int(os.getenv("PLAYWRIGHT_PORT", "3000"))
-HOST = os.getenv("PLAYWRIGHT_HOST", "0.0.0.0")
-WS_FILE = os.getenv("WS_ENDPOINT_FILE", "/var/run/playwright-ws-endpoint")
-
-# Playwright CLI will output a line like:
-#   Listening on ws://0.0.0.0:3000/playwright
-ENDPOINT_RE = re.compile(r"Listening on\s+(ws:\/\/[^\s]+)")
+from playwright.async_api import async_playwright
 
 
-async def run():
-    # Start the Playwright websocket server
-    proc = await asyncio.create_subprocess_exec(
-        sys.executable,
-        "-m",
-        "playwright",
-        "run-server",
-        "--port",
-        str(PORT),
-        "--host",
-        HOST,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.STDOUT,
-    )
+browser = None
 
-    ws_endpoint = None
-    assert proc.stdout is not None
-    async for raw in proc.stdout:
-        line = raw.decode(errors="ignore").rstrip()
-        print(line, flush=True)
-        if ws_endpoint is None:
-            m = ENDPOINT_RE.search(line)
-            if m:
-                ws_endpoint = m.group(1)
-                # Replace 0.0.0.0 with actual hostname for external clients if needed
-                external_host = os.getenv("PUBLIC_HOST")
-                if external_host and ws_endpoint.startswith("ws://0.0.0.0:"):
-                    ws_endpoint = ws_endpoint.replace(
-                        "ws://0.0.0.0:", f"ws://{external_host}:"
-                    )
-                with open(WS_FILE, "w") as f:
-                    f.write(ws_endpoint)
-                print(
-                    f"[server] Wrote ws endpoint to {WS_FILE}: {ws_endpoint}",
-                    flush=True,
-                )
 
-    rc = await proc.wait()
-    return rc
+async def start_browser():
+    """Launch Chromium with CDP debugging enabled"""
+    global browser
+    
+    print("🚀 Starting Playwright browser with CDP...")
+    
+    async with async_playwright() as p:
+        # Launch Chromium with CDP debugging on port 9222 (bound to localhost)
+        # The socat forwarder will expose this on 0.0.0.0:9223
+        browser = await p.chromium.launch(
+            headless=False,
+            args=[
+                "--remote-debugging-port=9222",
+                "--start-maximized",
+                "--kiosk",
+                "--no-first-run",
+                "--no-default-browser-check",
+                "--disable-background-networking",
+                "--disable-background-timer-throttling",
+                "--disable-backgrounding-occluded-windows",
+                "--disable-breakpad",
+                "--disable-client-side-phishing-detection",
+                "--disable-component-extensions-with-background-pages",
+                "--disable-default-apps",
+                "--disable-dev-shm-usage",
+                "--disable-extensions",
+                "--disable-features=TranslateUI",
+                "--disable-hang-monitor",
+                "--disable-ipc-flooding-protection",
+                "--disable-popup-blocking",
+                "--disable-prompt-on-repost",
+                "--disable-renderer-backgrounding",
+                "--disable-sync",
+                "--force-color-profile=srgb",
+                "--metrics-recording-only",
+                "--no-sandbox",
+                "--password-store=basic",
+                "--use-mock-keychain",
+                "--enable-automation",
+            ]
+        )
+        
+        print(f"✅ Browser launched! CDP endpoint: http://localhost:9222")
+        print(f"📡 External CDP endpoint (via socat): http://0.0.0.0:9223")
+        print(f"🖥️  Browser visible at: http://localhost:6080 (noVNC)")
+        
+        # Keep the browser running
+        try:
+            while True:
+                await asyncio.sleep(1)
+        except asyncio.CancelledError:
+            print("🛑 Shutting down browser...")
+            if browser:
+                await browser.close()
+
+
+def signal_handler(signum, frame):
+    """Handle shutdown signals gracefully"""
+    print(f"\n⚠️  Received signal {signum}, shutting down...")
+    sys.exit(0)
 
 
 if __name__ == "__main__":
+    # Register signal handlers
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
+    
     try:
-        rc = asyncio.run(run())
-        sys.exit(rc)
+        asyncio.run(start_browser())
     except KeyboardInterrupt:
-        pass
+        print("\n👋 Browser server stopped")
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        sys.exit(1)
