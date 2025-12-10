@@ -367,6 +367,21 @@ jobs:
             exit 1
           fi
           echo "✅ Browser-manager deployed successfully"
+          
+          # Get service URL immediately
+          echo ""
+          echo "🌐 Getting browser-manager URL..."
+          for i in {1..30}; do
+            BROWSER_IP=$(kubectl get service browser-manager -n doot-agent -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null)
+            if [ -n "$BROWSER_IP" ]; then
+              echo "✅ Browser Manager API: http://$BROWSER_IP:8000"
+              echo "   Health: http://$BROWSER_IP:8000/health"
+              echo "   Docs: http://$BROWSER_IP:8000/docs"
+              break
+            fi
+            echo "   Waiting for external IP... ($i/30)"
+            sleep 2
+          done
 
       - name: Deploy agent-platform
         if: |
