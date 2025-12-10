@@ -351,12 +351,12 @@ jobs:
             ports:
             - port: 8000
               targetPort: 8000
-            type: ClusterIP
+            type: LoadBalancer
           EOF
           
-          # Wait for rollout with better error handling
-          if ! kubectl rollout status deployment/browser-manager -n doot-agent --timeout=5m; then
-            echo "Deployment failed! Checking pod status..."
+          echo "⏳ Waiting for browser-manager deployment (timeout: 10m)..."
+          if ! kubectl rollout status deployment/browser-manager -n doot-agent --timeout=10m; then
+            echo "❌ Deployment failed! Checking pod status..."
             kubectl get pods -n doot-agent -l app=browser-manager
             echo ""
             echo "Pod logs:"
@@ -366,6 +366,7 @@ jobs:
             kubectl describe pods -n doot-agent -l app=browser-manager || true
             exit 1
           fi
+          echo "✅ Browser-manager deployed successfully"
 
       - name: Deploy agent-platform
         if: |
@@ -405,12 +406,40 @@ jobs:
           kubectl get pods -n doot-agent
           
           echo ""
+          echo "=== Deployments ==="
+          kubectl get deployments -n doot-agent
+          
+          echo ""
           echo "=== Services ==="
           kubectl get services -n doot-agent
           
           echo ""
-          echo "=== Deployments ==="
-          kubectl get deployments -n doot-agent
+          echo "⏳ Waiting for LoadBalancer external IP (up to 2 minutes)..."
+          kubectl wait --for=jsonpath='{.status.loadBalancer.ingress}' service/browser-manager -n doot-agent --timeout=120s || true
+          
+          echo ""
+          echo "======================================"
+          echo "🎉 DEPLOYMENT SUCCESSFUL!"
+          echo "======================================"
+          echo ""
+          
+          # Get browser-manager URL
+          BROWSER_MANAGER_IP=$(kubectl get service browser-manager -n doot-agent -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "pending")
+          if [ "$BROWSER_MANAGER_IP" != "pending" ] && [ -n "$BROWSER_MANAGER_IP" ]; then
+            echo "🌐 Browser Manager API:"
+            echo "   http://$BROWSER_MANAGER_IP:8000"
+            echo "   Health: http://$BROWSER_MANAGER_IP:8000/health"
+            echo "   Docs: http://$BROWSER_MANAGER_IP:8000/docs"
+          else
+            echo "🌐 Browser Manager (ClusterIP - use port-forward):"
+            echo "   kubectl port-forward -n doot-agent svc/browser-manager 8000:8000"
+            echo "   Then access: http://localhost:8000"
+          fi
+          
+          echo ""
+          echo "📊 Quick Status Check:"
+          kubectl get pods,svc,deploy -n doot-agent -l app=browser-manager
+          echo "======================================"
 
   # Job 5: Health checks
   health-check:
