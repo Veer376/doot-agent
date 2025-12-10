@@ -1,5 +1,6 @@
 """Configuration for browser-manager service"""
 import os
+from pydantic import field_validator
 from pydantic_settings import BaseSettings
 
 
@@ -9,6 +10,17 @@ class Config(BaseSettings):
     # Service
     host: str = "0.0.0.0"
     port: int = 8000
+    
+    @field_validator('port', mode='before')
+    @classmethod
+    def parse_port(cls, v):
+        """Handle Kubernetes PORT env var which might be tcp://host:port format"""
+        if isinstance(v, str):
+            # If it's a Kubernetes service URL like tcp://10.0.0.1:8000, extract the port
+            if v.startswith('tcp://'):
+                v = v.split(':')[-1]
+            return int(v)
+        return v
     
     # Kubernetes
     namespace: str = "orbit-agent"
