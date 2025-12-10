@@ -198,7 +198,72 @@ jobs:
 
       - name: Apply namespace
         run: |
-          kubectl apply -f k8s/namespace.yaml
+          cat <<EOF | kubectl apply -f -
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: doot-agent
+            labels:
+              name: doot-agent
+          EOF
+
+      - name: Apply browser-manager RBAC
+        run: |
+          cat <<EOF | kubectl apply -f -
+          apiVersion: v1
+          kind: ServiceAccount
+          metadata:
+            name: browser-manager
+            namespace: doot-agent
+            annotations:
+              iam.gke.io/gcp-service-account: browser-manager-sa@${{ env.PROJECT_ID }}.iam.gserviceaccount.com
+          ---
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: Role
+          metadata:
+            name: browser-manager
+            namespace: doot-agent
+          rules:
+          - apiGroups: [""]
+            resources: ["pods"]
+            verbs: ["get", "list", "watch", "create", "delete"]
+          - apiGroups: [""]
+            resources: ["pods/log"]
+            verbs: ["get", "list"]
+          - apiGroups: [""]
+            resources: ["pods/exec"]
+            verbs: ["create"]
+          ---
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: RoleBinding
+          metadata:
+            name: browser-manager
+            namespace: doot-agent
+          roleRef:
+            apiGroup: rbac.authorization.k8s.io
+            kind: Role
+            name: browser-manager
+          subjects:
+          - kind: ServiceAccount
+            name: browser-manager
+            namespace: doot-agent
+          EOF
+
+      - name: Apply browser-manager config
+        run: |
+          cat <<EOF | kubectl apply -f -
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: browser-manager-config
+            namespace: doot-agent
+          type: Opaque
+          stringData:
+            BROWSER_IMAGE: "${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/browser:latest"
+            GCP_PROJECT_ID: "${{ env.PROJECT_ID }}"
+            MAX_BROWSERS: "20"
+            ENVIRONMENT: "production"
+          EOF
 
       - name: Deploy browser-manager
         if: |
@@ -207,20 +272,100 @@ jobs:
            github.event.inputs.service == 'browser-manager' ||
            github.event_name == 'push')
         run: |
-          # Update image in deployment with latest SHA
-          kubectl set image deployment/browser-manager \
-            browser-manager=${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/browser-manager:${{ github.sha }} \
-            -n doot-agent || \
-          (
-            # If deployment doesn't exist, apply all manifests
-            kubectl apply -f k8s/namespace.yaml
-            kubectl apply -f k8s/browser-manager-rbac.yaml
-            kubectl apply -f k8s/browser-manager-secret.yaml
-            kubectl apply -f k8s/browser-manager-deployment.yaml
-          )
+          cat <<EOF | kubectl apply -f -
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: browser-manager
+            namespace: doot-agent
+            labels:
+              app: browser-manager
+          spec:
+            replicas: 2
+            selector:
+              matchLabels:
+                app: browser-manager
+            template:
+              metadata:
+                labels:
+                  app: browser-manager
+              spec:
+                serviceAccountName: browser-manager
+                containers:
+                - name: browser-manager
+                  image: ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/browser-manager:${{ github.sha }}
+                  imagePullPolicy: Always
+                  ports:
+                  - containerPort: 8000
+                  env:
+                  - name: BROWSER_IMAGE
+                    valueFrom:
+                      secretKeyRef:
+                        name: browser-manager-config
+                        key: BROWSER_IMAGE
+                  - name: GCP_PROJECT_ID
+                    valueFrom:
+                      secretKeyRef:
+                        name: browser-manager-config
+                        key: GCP_PROJECT_ID
+                  - name: MAX_BROWSERS
+                    valueFrom:
+                      secretKeyRef:
+                        name: browser-manager-config
+                        key: MAX_BROWSERS
+                  - name: ENVIRONMENT
+                    valueFrom:
+                      secretKeyRef:
+                        name: browser-manager-config
+                        key: ENVIRONMENT
+                  - name: BROWSER_MANAGER_NAMESPACE
+                    value: "doot-agent"
+                  resources:
+                    requests:
+                      memory: "512Mi"
+                      cpu: "500m"
+                    limits:
+                      memory: "1Gi"
+                      cpu: "1000m"
+                  livenessProbe:
+                    httpGet:
+                      path: /health
+                      port: 8000
+                    initialDelaySeconds: 30
+                    periodSeconds: 10
+                  readinessProbe:
+                    httpGet:
+                      path: /health
+                      port: 8000
+                    initialDelaySeconds: 10
+                    periodSeconds: 5
+          ---
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: browser-manager
+            namespace: doot-agent
+          spec:
+            selector:
+              app: browser-manager
+            ports:
+            - port: 8000
+              targetPort: 8000
+            type: ClusterIP
+          EOF
           
-          # Wait for rollout
-          kubectl rollout status deployment/browser-manager -n doot-agent --timeout=5m
+          # Wait for rollout with better error handling
+          if ! kubectl rollout status deployment/browser-manager -n doot-agent --timeout=5m; then
+            echo "Deployment failed! Checking pod status..."
+            kubectl get pods -n doot-agent -l app=browser-manager
+            echo ""
+            echo "Pod logs:"
+            kubectl logs -n doot-agent -l app=browser-manager --tail=100 || true
+            echo ""
+            echo "Pod events:"
+            kubectl describe pods -n doot-agent -l app=browser-manager || true
+            exit 1
+          fi
 
       - name: Deploy agent-platform
         if: |
