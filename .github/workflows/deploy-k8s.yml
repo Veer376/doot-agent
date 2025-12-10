@@ -427,27 +427,6 @@ jobs:
             namespace: doot-agent
           EOF
 
-      - name: Apply agent-platform config
-        if: |
-          needs.build-agent-platform.result == 'success' &&
-          (github.event.inputs.service == 'all' || 
-           github.event.inputs.service == 'agent-platform' ||
-           github.event_name == 'push')
-        run: |
-          cat <<EOF | kubectl apply -f -
-          apiVersion: v1
-          kind: Secret
-          metadata:
-            name: agent-platform-config
-            namespace: doot-agent
-          type: Opaque
-          stringData:
-            REDIS_URL: "${{ secrets.REDIS_URL }}"
-            POSTGRES_URL: "${{ secrets.POSTGRES_URL }}"
-            SUPABASE_URL: "${{ secrets.SUPABASE_URL }}"
-            SUPABASE_KEY: "${{ secrets.SUPABASE_KEY }}"
-          EOF
-
       - name: Deploy agent-platform
         if: |
           needs.build-agent-platform.result == 'success' &&
@@ -492,23 +471,23 @@ jobs:
                   - name: REDIS_URL
                     valueFrom:
                       secretKeyRef:
-                        name: agent-platform-config
-                        key: REDIS_URL
+                        name: redis-url
+                        key: latest
                   - name: POSTGRES_URL
                     valueFrom:
                       secretKeyRef:
-                        name: agent-platform-config
-                        key: POSTGRES_URL
+                        name: postgres-url
+                        key: latest
                   - name: SUPABASE_URL
                     valueFrom:
                       secretKeyRef:
-                        name: agent-platform-config
-                        key: SUPABASE_URL
-                  - name: SUPABASE_KEY
+                        name: supabase-url
+                        key: latest
+                  - name: SUPABASE_SERVICE_ROLE_KEY
                     valueFrom:
                       secretKeyRef:
-                        name: agent-platform-config
-                        key: SUPABASE_KEY
+                        name: supabase-service-role-key
+                        key: latest
                   resources:
                     requests:
                       memory: "512Mi"
