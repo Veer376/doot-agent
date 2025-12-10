@@ -46,11 +46,14 @@ def main():
         sys.exit(1)
     
     # Get project configuration
-    project_id = os.environ.get('PROJECT_ID', 'orbit-agent')
+    project_id = os.environ.get('PROJECT_ID', 'doot-agent')
     github_sa = os.environ.get('SA_EMAIL', f'github-actions-sa@{project_id}.iam.gserviceaccount.com')
+    browser_manager_sa = f'browser-manager-sa@{project_id}.iam.gserviceaccount.com'
+    agent_platform_sa = f'agent-platform-sa@{project_id}.iam.gserviceaccount.com'
     
     print(f"🔐 Bulk Secret Upload to Google Cloud Secret Manager")
-    print(f"Project: {project_id}\n")
+    print(f"Project: {project_id}")
+    print(f"For GKE Workload Identity + Cloud Run\n")
     
     # Get project number for compute service account
     print("Getting project number...")
@@ -127,6 +130,10 @@ def main():
         service_accounts = []
         if github_sa:
             service_accounts.append(("GitHub Actions", github_sa))
+        if browser_manager_sa:
+            service_accounts.append(("Browser Manager (GKE)", browser_manager_sa))
+        if agent_platform_sa:
+            service_accounts.append(("Agent Platform (GKE)", agent_platform_sa))
         if cloudrun_sa:
             service_accounts.append(("Cloud Run", cloudrun_sa))
         
