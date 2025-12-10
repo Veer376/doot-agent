@@ -43,6 +43,7 @@ NAMESPACE = "doot-agent"
 # Service Accounts
 GITHUB_SA_NAME = "github-actions-sa"
 BROWSER_MANAGER_SA_NAME = "browser-manager-sa"
+AGENT_PLATFORM_SA_NAME = "agent-platform-sa"
 
 # GitHub
 GITHUB_REPO = "Veer376/doot-agent"
@@ -445,7 +446,7 @@ def step_5_create_service_accounts():
     
     roles = [
         "roles/artifactregistry.writer",     # Push images
-        "roles/container.developer",         # Deploy to GKE
+        "roles/container.admin",             # Full GKE access (includes RBAC)
         "roles/iam.serviceAccountUser",      # Use service accounts
     ]
     
@@ -496,6 +497,44 @@ def step_5_create_service_accounts():
         "Granting Secret Manager Accessor to Browser Manager SA",
         check=False
     )
+    
+    # 3. Agent Platform SA (for Workload Identity)
+    result = subprocess.run(
+        f"gcloud iam service-accounts describe {AGENT_PLATFORM_SA_NAME}@{PROJECT_ID}.iam.gserviceaccount.com --project={PROJECT_ID}",
+        shell=True,
+        capture_output=True,
+        text=True
+    )
+    
+    if result.returncode == 0:
+        print(f"✅ Agent Platform service account already exists")
+    else:
+        run_command(
+            f"gcloud iam service-accounts create {AGENT_PLATFORM_SA_NAME} \
+                --display-name=\"Agent Platform Service Account\" \
+                --project={PROJECT_ID}",
+            "Creating Agent Platform service account",
+            check=True
+        )
+    
+    # Grant permissions to Agent Platform SA
+    agent_sa_email = f"{AGENT_PLATFORM_SA_NAME}@{PROJECT_ID}.iam.gserviceaccount.com"
+    
+    run_command(
+        f'gcloud projects add-iam-policy-binding {PROJECT_ID} '
+        f'--member="serviceAccount:{agent_sa_email}" '
+        f'--role="roles/artifactregistry.reader"',
+        "Granting Artifact Registry Reader to Agent Platform SA",
+        check=False
+    )
+    
+    run_command(
+        f'gcloud projects add-iam-policy-binding {PROJECT_ID} '
+        f'--member="serviceAccount:{agent_sa_email}" '
+        f'--role="roles/secretmanager.secretAccessor"',
+        "Granting Secret Manager Accessor to Agent Platform SA",
+        check=False
+    )
 
 def step_6_setup_workload_identity():
     """Setup Workload Identity binding."""
@@ -503,15 +542,28 @@ def step_6_setup_workload_identity():
     print("STEP 6: Setting up Workload Identity")
     print("="*70)
     
+    # Browser Manager
     browser_sa_email = f"{BROWSER_MANAGER_SA_NAME}@{PROJECT_ID}.iam.gserviceaccount.com"
-    k8s_sa = f"serviceAccount:{PROJECT_ID}.svc.id.goog[{NAMESPACE}/browser-manager]"
+    browser_k8s_sa = f"serviceAccount:{PROJECT_ID}.svc.id.goog[{NAMESPACE}/browser-manager]"
     
     run_command(
         f'gcloud iam service-accounts add-iam-policy-binding {browser_sa_email} '
         f'--role="roles/iam.workloadIdentityUser" '
-        f'--member="{k8s_sa}" '
+        f'--member="{browser_k8s_sa}" '
         f'--project={PROJECT_ID}',
-        "Binding Kubernetes SA to GCP SA"
+        "Binding Browser Manager K8s SA to GCP SA"
+    )
+    
+    # Agent Platform
+    agent_sa_email = f"{AGENT_PLATFORM_SA_NAME}@{PROJECT_ID}.iam.gserviceaccount.com"
+    agent_k8s_sa = f"serviceAccount:{PROJECT_ID}.svc.id.goog[{NAMESPACE}/agent-platform]"
+    
+    run_command(
+        f'gcloud iam service-accounts add-iam-policy-binding {agent_sa_email} '
+        f'--role="roles/iam.workloadIdentityUser" '
+        f'--member="{agent_k8s_sa}" '
+        f'--project={PROJECT_ID}',
+        "Binding Agent Platform K8s SA to GCP SA"
     )
 
 def step_7_create_github_sa_key():
@@ -588,34 +640,62 @@ def step_9_apply_kubernetes_manifests():
     print("STEP 9: Applying Kubernetes Manifests")
     print("="*70)
     
+    print("\n⚠️  NOTE: The GitHub Actions workflow contains the authoritative K8s manifests.")
+    print("This step only applies standalone YAML files from k8s/ directory.")
+    print("For production deployments, use: git push (triggers GitHub Actions)\n")
+    
     # Apply namespace
     run_command(
         f"kubectl apply -f k8s/namespace.yaml",
-        "Creating namespace"
+        "Creating namespace",
+        check=False
     )
     
     # Apply browser-manager RBAC
     run_command(
         f"kubectl apply -f k8s/browser-manager-rbac.yaml",
-        "Creating RBAC for browser-manager"
+        "Creating RBAC for browser-manager",
+        check=False
+    )
+    
+    # Apply agent-platform RBAC
+    run_command(
+        f"kubectl apply -f k8s/agent-platform-rbac.yaml",
+        "Creating RBAC for agent-platform",
+        check=False
     )
     
     # Apply browser-manager secret
     run_command(
         f"kubectl apply -f k8s/browser-manager-secret.yaml",
-        "Creating secrets for browser-manager"
+        "Creating secrets for browser-manager",
+        check=False
     )
     
     # Apply browser-manager deployment
     run_command(
         f"kubectl apply -f k8s/browser-manager-deployment.yaml",
-        "Deploying browser-manager"
+        "Deploying browser-manager",
+        check=False
     )
     
-    print("\n⏳ Waiting for deployment to be ready...")
+    # Apply agent-platform deployment
     run_command(
-        f"kubectl rollout status deployment/browser-manager -n {NAMESPACE} --timeout=3m",
+        f"kubectl apply -f k8s/agent-platform-deployment.yaml",
+        "Deploying agent-platform",
+        check=False
+    )
+    
+    print("\n⏳ Waiting for deployments to be ready...")
+    run_command(
+        f"kubectl rollout status deployment/browser-manager -n {NAMESPACE} --timeout=5m",
         "Waiting for browser-manager deployment",
+        check=False
+    )
+    
+    run_command(
+        f"kubectl rollout status deployment/agent-platform -n {NAMESPACE} --timeout=5m",
+        "Waiting for agent-platform deployment",
         check=False
     )
 
@@ -628,20 +708,32 @@ def step_10_verify():
     # Check pods
     run_command(
         f"kubectl get pods -n {NAMESPACE}",
-        "Checking pods"
+        "Checking pods",
+        check=False
     )
     
     # Check services
     run_command(
         f"kubectl get services -n {NAMESPACE}",
-        "Checking services"
+        "Checking services",
+        check=False
     )
     
     # Check deployments
     run_command(
         f"kubectl get deployments -n {NAMESPACE}",
-        "Checking deployments"
+        "Checking deployments",
+        check=False
     )
+    
+    print("\n" + "="*70)
+    print("🌐 Service URLs")
+    print("="*70)
+    print("\nTo get external IPs (LoadBalancer services):")
+    print(f"  kubectl get svc -n {NAMESPACE}")
+    print("\nTo access services locally:")
+    print(f"  kubectl port-forward -n {NAMESPACE} svc/browser-manager 8000:8000")
+    print(f"  kubectl port-forward -n {NAMESPACE} svc/agent-platform 5000:5000")
 
 def cleanup_key_file(key_file):
     """Clean up temporary key file."""
@@ -664,15 +756,19 @@ def main():
     print("""
     ╔═══════════════════════════════════════════════════════════════╗
     ║                                                               ║
-    ║   🚀 Orbit Agent - Complete GKE Setup Automation             ║
+    ║   🚀 Doot Agent - Complete GKE Setup Automation              ║
     ║                                                               ║
     ║   This script will:                                           ║
     ║   • Create GKE cluster                                        ║
-    ║   • Create service accounts                                   ║
-    ║   • Setup Workload Identity                                   ║
+    ║   • Create service accounts (3 total)                         ║
+    ║   • Setup Workload Identity (browser-manager + agent)         ║
     ║   • Create Kubernetes RBAC                                    ║
     ║   • Push secrets to GitHub                                    ║
-    ║   • Deploy browser-manager                                    ║
+    ║   • Deploy browser-manager + agent-platform                   ║
+    ║                                                               ║
+    ║   Note: Secrets for agent-platform (Redis, Postgres,         ║
+    ║   Supabase) must be uploaded separately using:               ║
+    ║   python upload-secrets.py                                    ║
     ║                                                               ║
     ╚═══════════════════════════════════════════════════════════════╝
     """)
@@ -723,13 +819,29 @@ def main():
         step_10_verify()
         
         print("\n" + "="*70)
-        print("🎉 SUCCESS! Everything is set up!")
+        print("🎉 SUCCESS! GKE Infrastructure is set up!")
         print("="*70)
+        print("\n✅ What was created:")
+        print("   • GKE cluster: doot-cluster")
+        print("   • 3 Service Accounts:")
+        print("     - github-actions-sa (for CI/CD)")
+        print("     - browser-manager-sa (Workload Identity)")
+        print("     - agent-platform-sa (Workload Identity)")
+        print("   • Artifact Registry: doot-agent-repo")
+        print("   • GitHub secrets pushed")
+        print("   • Kubernetes RBAC configured")
         print("\n✅ Next steps:")
-        print("   1. Push code to GitHub: git push origin main")
-        print("   2. Check GitHub Actions: https://github.com/Veer376/orbit-agent/actions")
-        print("   3. Test deployment: kubectl port-forward -n orbit-agent svc/browser-manager 8000:8000")
-        print("   4. Create session: curl -X POST http://localhost:8000/sessions -H 'Content-Type: application/json' -d '{\"user_id\":\"test\"}'")
+        print("   1. Upload application secrets to GCP Secret Manager:")
+        print("      python upload-secrets.py")
+        print("   2. Push code to GitHub to trigger deployment:")
+        print("      git push origin main")
+        print("   3. Monitor deployment:")
+        print("      https://github.com/Veer376/doot-agent/actions")
+        print("   4. Get service URLs after deployment:")
+        print(f"      kubectl get svc -n {NAMESPACE}")
+        print("   5. Test services:")
+        print(f"      kubectl port-forward -n {NAMESPACE} svc/agent-platform 5000:5000")
+        print(f"      kubectl port-forward -n {NAMESPACE} svc/browser-manager 8000:8000")
         
         cleanup_key_file(key_file)
         
