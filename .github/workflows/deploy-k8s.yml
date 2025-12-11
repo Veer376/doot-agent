@@ -427,6 +427,47 @@ jobs:
             namespace: doot-agent
           EOF
 
+      - name: Sync GCP Secrets to K8s
+        if: |
+          needs.build-agent-platform.result == 'success' &&
+          (github.event.inputs.service == 'all' || 
+           github.event.inputs.service == 'agent-platform' ||
+           github.event_name == 'push')
+        run: |
+          echo "🔐 Syncing secrets from GCP Secret Manager to Kubernetes..."
+          
+          # List of secrets to sync (format: k8s-secret-name=GCP_SECRET_NAME)
+          SECRETS=(
+            "redis-url=REDIS_URL"
+            "postgres-url=POSTGRES_URL"
+            "supabase-url=SUPABASE_URL"
+            "supabase-service-role-key=SUPABASE_SERVICE_ROLE_KEY"
+            "tavily-api-key=TAVILY_API_KEY"
+            "composio-api-key=COMPOSIO_API_KEY"
+            "gemini-api-key=GEMINI_API_KEY"
+            "google-api-key=GOOGLE_API_KEY"
+          )
+          
+          for SECRET_MAPPING in "${SECRETS[@]}"; do
+            K8S_NAME="${SECRET_MAPPING%=*}"
+            GCP_NAME="${SECRET_MAPPING#*=}"
+            
+            echo "  Syncing $GCP_NAME -> $K8S_NAME..."
+            
+            # Fetch secret value from GCP
+            SECRET_VALUE=$(gcloud secrets versions access latest --secret="$GCP_NAME" --project=${{ env.PROJECT_ID }})
+            
+            # Delete existing K8s secret if it exists
+            kubectl delete secret "$K8S_NAME" -n doot-agent 2>/dev/null || true
+            
+            # Create K8s secret
+            kubectl create secret generic "$K8S_NAME" \
+              -n doot-agent \
+              --from-literal=latest="$SECRET_VALUE"
+          done
+          
+          echo "✅ All secrets synced successfully"
+
       - name: Deploy agent-platform
         if: |
           needs.build-agent-platform.result == 'success' &&
@@ -487,6 +528,26 @@ jobs:
                     valueFrom:
                       secretKeyRef:
                         name: supabase-service-role-key
+                        key: latest
+                  - name: TAVILY_API_KEY
+                    valueFrom:
+                      secretKeyRef:
+                        name: tavily-api-key
+                        key: latest
+                  - name: COMPOSIO_API_KEY
+                    valueFrom:
+                      secretKeyRef:
+                        name: composio-api-key
+                        key: latest
+                  - name: GEMINI_API_KEY
+                    valueFrom:
+                      secretKeyRef:
+                        name: gemini-api-key
+                        key: latest
+                  - name: GOOGLE_API_KEY
+                    valueFrom:
+                      secretKeyRef:
+                        name: google-api-key
                         key: latest
                   resources:
                     requests:
