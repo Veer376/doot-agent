@@ -26,7 +26,7 @@ env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   REGION: ${{ secrets.GCP_REGION }}
   REGISTRY: ${{ secrets.GCP_REGISTRY }}
-  REPOSITORY: orbit-agent-repo
+  REPOSITORY: doot-agent-repo
 
 jobs:
   # Build and push Docker images
