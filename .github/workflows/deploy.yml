@@ -176,14 +176,14 @@ jobs:
             --platform=managed \
             --region=${{ env.REGION }} \
             --allow-unauthenticated \
-            --memory=2Gi \
+            --memory=4Gi \
             --cpu=2 \
-            --timeout=300 \
-            --concurrency=10 \
+            --timeout=600 \
+            --concurrency=5 \
             --min-instances=0 \
-            --max-instances=5 \
-            --port=3500 \
-            --set-env-vars="PLAYWRIGHT_PORT=3500,PLAYWRIGHT_HOST=0.0.0.0" \
+            --max-instances=3 \
+            --port=6080 \
+            --no-cpu-throttling \
             --execution-environment=gen2
 
       - name: Get Browser Service URL
