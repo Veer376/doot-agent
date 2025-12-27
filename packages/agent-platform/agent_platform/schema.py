@@ -101,31 +101,25 @@ class RunCreateStateful(TypedDict, total=False):
     """Payload for creating a run."""
 
     assistant_id: str
-    after_seconds: int | None = None
-    checkpoint: Checkpoint | None = None
-    checkpoint_during: bool = False
-    command: Command | None = None
-    config: Config | None = None
-    context: Context | None = None
-    durability: Durability = "async"
-    feedback_keys: list[str] | None = None
-    if_not_exists: IfNotExists = "reject"
-    input: dict[str, Any] | None = None
-    interrupt_before: str | list[str] | None = None
-    interrupt_after: str | list[str] | None = None
-    metadata: Json = None
-    multitask_strategy: MultitaskStrategy = "enqueue"
-    on_disconnect: DisconnectMode = "cancel"
-    stream_mode: list[StreamMode] | StreamMode = "messages"
-    stream_resumable: bool = False
-    stream_subgraphs: bool = False
-    webhook: str | None = None
-
-    def __getitem__(self, key):
-        return getattr(self, key)
-
-    def get(self, key, default=None):
-        return getattr(self, key, default)
+    after_seconds: int | None
+    checkpoint: Checkpoint | None
+    checkpoint_during: bool
+    command: dict[str, Any] | None
+    config: dict[str, Any] | None
+    context: dict[str, Any] | None
+    durability: Literal["async", "ephemeral"]
+    feedback_keys: list[str] | None
+    if_not_exists: Literal["create", "reject"]
+    input: dict[str, Any] | None
+    interrupt_before: str | list[str] | None
+    interrupt_after: str | list[str] | None
+    metadata: Json
+    multitask_strategy: Literal["reject", "rollback", "interrupt", "enqueue"]
+    on_disconnect: Literal["cancel", "continue"]
+    stream_mode: list[str] | str
+    stream_resumable: bool
+    stream_subgraphs: bool
+    webhook: str | None
 
 
 class ThreadStateSearch(TypedDict, total=False):
