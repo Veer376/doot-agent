@@ -17,6 +17,8 @@ from contextlib import asynccontextmanager
 from orbit_core.clients import get_supabase, close_supabase, get_redis, close_redis
 from orbit_core.clients.checkpointer import setup_checkpointer, close_checkpointer
 from ..graph import load_graphs_from_file, GraphRegistryError
+from ..schema import RunCreateStateful, Checkpoint, ThreadStateSearch
+from pydantic import TypeAdapter
 
 # Ensure asyncio subprocess support on Windows for Playwright by using the Selector policy
 # Must be set at import time before any event loop is created (e.g., before uvicorn starts)
@@ -35,6 +37,11 @@ PROJECT_ROOT = Path(os.getenv("ORBIT_AGENT_ROOT", default_root))
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Force Pydantic to rebuild TypeAdapters for TypedDicts with forward references
+    TypeAdapter(RunCreateStateful).rebuild()
+    TypeAdapter(Checkpoint).rebuild()
+    TypeAdapter(ThreadStateSearch).rebuild()
+    
     # startup logic - initialize clients first
     await get_supabase()
     await get_redis()
@@ -76,6 +83,8 @@ app.add_middleware(
     allow_headers=["*"],  # Allows all headers
 )
 
+# add the app.exception_handler
+# use assertion in the project.
 
 # Middleware for request logging
 @app.middleware("http")
