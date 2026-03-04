@@ -23,3 +23,4 @@ test_url_formats.py
 *.md
 github-sa-key.json
 test_cdp_connection.py
+build

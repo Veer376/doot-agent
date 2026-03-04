@@ -1,6 +1,6 @@
 {
   "dependencies": [
-    "."
+    "./packages/orbit-core"
   ],
   "graphs": {
     "chat_agent": "packages/orbit-core/orbit_core/agents/chat_agent.py:graph",

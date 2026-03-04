@@ -9,7 +9,9 @@ description = "FastAPI service for Orbit Agent platform"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "orbit-core",
+    # use a relative path reference so that others installing the project can resolve
+    # the local package without hard‑coding an absolute drive path
+    "orbit-core @ file://../orbit-core",
     "fastapi>=0.116.1",
     "uvicorn>=0.35.0",
     "langgraph-checkpoint-postgres>=2.0.23",
