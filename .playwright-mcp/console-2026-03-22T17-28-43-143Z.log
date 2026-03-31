@@ -1,0 +1,294 @@
+[    4375ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:5173/favicon.ico:0
+[    5975ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8080/assistants/search:0
+[    5976ms] [ERROR] Failed to fetch cloud assistants from LangGraph API {error: ConnectionError: Unable to connect to LangGraph server. Please ensure the server is running and acc…, apiUrl: http://127.0.0.1:8080} @ http://localhost:5173/src/hooks/use-cloud-agents.tsx:75
+[    5977ms] [WARNING] Retrying assistant fetch with alternate API URL http://localhost:8080 @ http://localhost:5173/src/hooks/use-cloud-agents.tsx:84
+[    6028ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8080/oap_mcp:0
+[    6035ms] TypeError: Failed to fetch
+    at StreamableHTTPClientTransport.send (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/@modelcontextprotocol_sdk_client_streamableHttp__js.js?v=c3d3de95:1265:52)
+[    6209ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8080/threads/search:0
+[    6210ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8080/threads/search:0
+[    6224ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8080/assistants/search:0
+[    6224ms] [ERROR] Failed to fetch cloud assistants from LangGraph API {error: ConnectionError: Unable to connect to LangGraph server. Please ensure the server is running and acc…, apiUrl: http://127.0.0.1:8080} @ http://localhost:5173/src/hooks/use-cloud-agents.tsx:75
+[    6225ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8080/threads/search:0
+[    6226ms] [WARNING] Retrying assistant fetch with alternate API URL http://localhost:8080 @ http://localhost:5173/src/hooks/use-cloud-agents.tsx:84
+[    8058ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8080/threads/search:0
+[    8306ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8080/assistants/search:0
+[    8307ms] [ERROR] Fallback API URL also failed ConnectionError: Unable to connect to LangGraph server. Please ensure the server is running and accessible. Original error: Failed to fetch
+    at Object.onFailedAttempt (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-V6DNZRRB.js?v=c3d3de95:1239:35)
+    at onAttemptFailure (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-V6DNZRRB.js?v=c3d3de95:284:17)
+    at pRetry (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-V6DNZRRB.js?v=c3d3de95:365:17)
+    at async http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-V6DNZRRB.js?v=c3d3de95:860:26 @ http://localhost:5173/src/hooks/use-cloud-agents.tsx:88
+[    8573ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8080/assistants/search:0
+[    8573ms] [ERROR] Fallback API URL also failed ConnectionError: Unable to connect to LangGraph server. Please ensure the server is running and accessible. Original error: Failed to fetch
+    at Object.onFailedAttempt (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-V6DNZRRB.js?v=c3d3de95:1239:35)
+    at onAttemptFailure (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-V6DNZRRB.js?v=c3d3de95:284:17)
+    at pRetry (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-V6DNZRRB.js?v=c3d3de95:365:17)
+    at async http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-V6DNZRRB.js?v=c3d3de95:860:26 @ http://localhost:5173/src/hooks/use-cloud-agents.tsx:88
+[   21227ms] [ERROR] Warning: Function components cannot be given refs. Attempts to access this ref will fail. Did you mean to use React.forwardRef()?%s%s 
+
+Check the render method of `Primitive.div.SlotClone`. 
+    at DialogOverlay (http://localhost:5173/src/components/ui/dialog.tsx:102:3)
+    at http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-2XSBQFJG.js?v=c3d3de95:138:13
+    at http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-2XSBQFJG.js?v=c3d3de95:115:13
+    at http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-2XSBQFJG.js?v=c3d3de95:227:13
+    at http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-XPHNQGON.js?v=c3d3de95:257:22
+    at Presence (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-FZ5ZOMIJ.js?v=c3d3de95:53:11)
+    at Provider (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-2XSBQFJG.js?v=c3d3de95:54:15)
+    at DialogPortal (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-FZ5ZOMIJ.js?v=c3d3de95:330:11)
+    at DialogPortal (http://localhost:5173/src/components/ui/dialog.tsx:62:6)
+    at DialogContent (http://localhost:5173/src/components/ui/dialog.tsx:127:3)
+    at Provider (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-2XSBQFJG.js?v=c3d3de95:54:15)
+    at Dialog (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-FZ5ZOMIJ.js?v=c3d3de95:270:5)
+    at Dialog (http://localhost:5173/src/components/ui/dialog.tsx:22:6)
+    at MCPServersDialog (http://localhost:5173/src/features/mcp/components/mcp-servers-dialog.tsx:42:3)
+    at div
+    at div
+    at div
+    at Sidebar (http://localhost:5173/src/components/ui/sidebar.tsx:161:3)
+    at AppSidebar (http://localhost:5173/src/components/sidebar/app-sidebar.tsx:60:33)
+    at div
+    at Provider (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-2XSBQFJG.js?v=c3d3de95:54:15)
+    at TooltipProvider (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/@radix-ui_react-tooltip.js?v=c3d3de95:621:5)
+    at _c (http://localhost:5173/src/components/ui/tooltip.tsx:21:50)
+    at SidebarProvider (http://localhost:5173/src/components/ui/sidebar.tsx:59:3)
+    at SidebarLayout (http://localhost:5173/src/components/sidebar/index.tsx:25:33)
+    at Router (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/react-router-dom.js?v=c3d3de95:7124:13)
+    at HashRouter (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/react-router-dom.js?v=c3d3de95:10362:3)
+    at MCPProvider (http://localhost:5173/src/providers/MCP.tsx:27:31)
+    at AgentProvider (http://localhost:5173/src/providers/Agent.tsx:31:33)
+    at QueryClientProvider (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-OVRCUNR3.js?v=c3d3de95:3103:3)
+    at ReactQueryProvider (http://localhost:5173/src/providers/QueryClient.tsx:23:3)
+    at AuthActionsProvider (http://localhost:5173/src/providers/Auth/AuthActions.tsx:24:3)
+    at AuthSessionProvider (http://localhost:5173/src/providers/Auth/AuthSession.tsx:24:3)
+    at AuthUserProvider (http://localhost:5173/src/providers/Auth/AuthUser.tsx:24:3)
+    at AuthProvider (http://localhost:5173/src/providers/Auth/index.tsx:48:3)
+    at V (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/next-themes.js?v=c3d3de95:44:25)
+    at J (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/next-themes.js?v=c3d3de95:42:18)
+    at ThemeProvider (http://localhost:5173/src/providers/Theme.tsx:19:33)
+    at AppProviders (http://localhost:5173/src/providers/index.tsx:23:32)
+    at App @ http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-AV7OOAHN.js?v=c3d3de95:520
+[   51446ms] [ERROR] Warning: Function components cannot be given refs. Attempts to access this ref will fail. Did you mean to use React.forwardRef()?%s%s 
+
+Check the render method of `Popover`. 
+    at Popover (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/@radix-ui_react-popover.js?v=c3d3de95:623:5)
+    at _c
+    at http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-2XSBQFJG.js?v=c3d3de95:138:13
+    at http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-2XSBQFJG.js?v=c3d3de95:115:13
+    at http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-2XSBQFJG.js?v=c3d3de95:227:13
+    at http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-2XSBQFJG.js?v=c3d3de95:138:13
+    at http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-2XSBQFJG.js?v=c3d3de95:115:13
+    at http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-2XSBQFJG.js?v=c3d3de95:227:13
+    at http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/@radix-ui_react-tooltip.js?v=c3d3de95:131:13
+    at http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/@radix-ui_react-tooltip.js?v=c3d3de95:757:13
+    at _c5
+    at Provider (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-2XSBQFJG.js?v=c3d3de95:54:15)
+    at Provider (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-2XSBQFJG.js?v=c3d3de95:54:15)
+    at Popper (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/@radix-ui_react-tooltip.js?v=c3d3de95:123:11)
+    at Tooltip (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/@radix-ui_react-tooltip.js?v=c3d3de95:665:5)
+    at Provider (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-2XSBQFJG.js?v=c3d3de95:54:15)
+    at TooltipProvider (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/@radix-ui_react-tooltip.js?v=c3d3de95:621:5)
+    at _c (http://localhost:5173/src/components/ui/tooltip.tsx:21:50)
+    at _c3
+    at Provider (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-2XSBQFJG.js?v=c3d3de95:54:15)
+    at TooltipProvider (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/@radix-ui_react-tooltip.js?v=c3d3de95:621:5)
+    at _c (http://localhost:5173/src/components/ui/tooltip.tsx:21:50)
+    at div
+    at form
+    at div
+    at div
+    at DragAndDropWrapper (http://localhost:5173/src/features/chat/components/thread/drag-drop-wrapper.tsx:21:3)
+    at Composer (http://localhost:5173/src/features/chat/components/thread/composer.tsx:233:3)
+    at div
+    at div
+    at div
+    at div
+    at StickyToBottomContent (http://localhost:5173/src/features/chat/components/thread/index.tsx:144:19)
+    at div
+    at StickToBottom (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/use-stick-to-bottom.js?v=c3d3de95:356:26)
+    at div
+    at Thread (http://localhost:5173/src/features/chat/components/thread/index.tsx:249:54)
+    at div
+    at div
+    at div
+    at ChatInterfaceInner (http://localhost:5173/src/features/chat/index.tsx:35:22)
+    at StreamProvider (http://localhost:5173/src/features/chat/providers/Stream.tsx:351:3)
+    at ThreadStateProvider (http://localhost:5173/src/features/chat/providers/ThreadState.tsx:36:39)
+    at ChatInterface
+    at div
+    at ChatPage (http://localhost:5173/src/pages/ChatPage.tsx:28:42)
+    at RenderedRoute (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/react-router-dom.js?v=c3d3de95:6333:26)
+    at Routes (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/react-router-dom.js?v=c3d3de95:7194:3)
+    at main
+    at SidebarInset (http://localhost:5173/src/components/ui/sidebar.tsx:426:25)
+    at div
+    at Provider (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-2XSBQFJG.js?v=c3d3de95:54:15)
+    at TooltipProvider (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/@radix-ui_react-tooltip.js?v=c3d3de95:621:5)
+    at _c (http://localhost:5173/src/components/ui/tooltip.tsx:21:50)
+    at SidebarProvider (http://localhost:5173/src/components/ui/sidebar.tsx:59:3)
+    at SidebarLayout (http://localhost:5173/src/components/sidebar/index.tsx:25:33)
+    at Router (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/react-router-dom.js?v=c3d3de95:7124:13)
+    at HashRouter (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/react-router-dom.js?v=c3d3de95:10362:3)
+    at MCPProvider (http://localhost:5173/src/providers/MCP.tsx:27:31)
+    at AgentProvider (http://localhost:5173/src/providers/Agent.tsx:31:33)
+    at QueryClientProvider (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-OVRCUNR3.js?v=c3d3de95:3103:3)
+    at ReactQueryProvider (http://localhost:5173/src/providers/QueryClient.tsx:23:3)
+    at AuthActionsProvider (http://localhost:5173/src/providers/Auth/AuthActions.tsx:24:3)
+    at AuthSessionProvider (http://localhost:5173/src/providers/Auth/AuthSession.tsx:24:3)
+    at AuthUserProvider (http://localhost:5173/src/providers/Auth/AuthUser.tsx:24:3)
+    at AuthProvider (http://localhost:5173/src/providers/Auth/index.tsx:48:3)
+    at V (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/next-themes.js?v=c3d3de95:44:25)
+    at J (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/next-themes.js?v=c3d3de95:42:18)
+    at ThemeProvider (http://localhost:5173/src/providers/Theme.tsx:19:33)
+    at AppProviders (http://localhost:5173/src/providers/index.tsx:23:32)
+    at App @ http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-AV7OOAHN.js?v=c3d3de95:520
+[   52384ms] [ERROR] Warning: Function components cannot be given refs. Attempts to access this ref will fail. Did you mean to use React.forwardRef()?%s%s 
+
+Check the render method of `Primitive.div.SlotClone`. 
+    at DialogOverlay (http://localhost:5173/src/components/ui/dialog.tsx:102:3)
+    at http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-2XSBQFJG.js?v=c3d3de95:138:13
+    at http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-2XSBQFJG.js?v=c3d3de95:115:13
+    at http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-2XSBQFJG.js?v=c3d3de95:227:13
+    at http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-XPHNQGON.js?v=c3d3de95:257:22
+    at Presence (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-FZ5ZOMIJ.js?v=c3d3de95:53:11)
+    at Provider (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-2XSBQFJG.js?v=c3d3de95:54:15)
+    at DialogPortal (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-FZ5ZOMIJ.js?v=c3d3de95:330:11)
+    at DialogPortal (http://localhost:5173/src/components/ui/dialog.tsx:62:6)
+    at DialogContent (http://localhost:5173/src/components/ui/dialog.tsx:127:3)
+    at Provider (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-2XSBQFJG.js?v=c3d3de95:54:15)
+    at Dialog (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-FZ5ZOMIJ.js?v=c3d3de95:270:5)
+    at Dialog (http://localhost:5173/src/components/ui/dialog.tsx:22:6)
+    at WelcomeModal (http://localhost:5173/src/components/onboarding/welcome-modal.tsx:22:32)
+    at ChatPage (http://localhost:5173/src/pages/ChatPage.tsx:28:42)
+    at RenderedRoute (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/react-router-dom.js?v=c3d3de95:6333:26)
+    at Routes (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/react-router-dom.js?v=c3d3de95:7194:3)
+    at main
+    at SidebarInset (http://localhost:5173/src/components/ui/sidebar.tsx:426:25)
+    at div
+    at Provider (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-2XSBQFJG.js?v=c3d3de95:54:15)
+    at TooltipProvider (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/@radix-ui_react-tooltip.js?v=c3d3de95:621:5)
+    at _c (http://localhost:5173/src/components/ui/tooltip.tsx:21:50)
+    at SidebarProvider (http://localhost:5173/src/components/ui/sidebar.tsx:59:3)
+    at SidebarLayout (http://localhost:5173/src/components/sidebar/index.tsx:25:33)
+    at Router (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/react-router-dom.js?v=c3d3de95:7124:13)
+    at HashRouter (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/react-router-dom.js?v=c3d3de95:10362:3)
+    at MCPProvider (http://localhost:5173/src/providers/MCP.tsx:27:31)
+    at AgentProvider (http://localhost:5173/src/providers/Agent.tsx:31:33)
+    at QueryClientProvider (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-OVRCUNR3.js?v=c3d3de95:3103:3)
+    at ReactQueryProvider (http://localhost:5173/src/providers/QueryClient.tsx:23:3)
+    at AuthActionsProvider (http://localhost:5173/src/providers/Auth/AuthActions.tsx:24:3)
+    at AuthSessionProvider (http://localhost:5173/src/providers/Auth/AuthSession.tsx:24:3)
+    at AuthUserProvider (http://localhost:5173/src/providers/Auth/AuthUser.tsx:24:3)
+    at AuthProvider (http://localhost:5173/src/providers/Auth/index.tsx:48:3)
+    at V (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/next-themes.js?v=c3d3de95:44:25)
+    at J (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/next-themes.js?v=c3d3de95:42:18)
+    at ThemeProvider (http://localhost:5173/src/providers/Theme.tsx:19:33)
+    at AppProviders (http://localhost:5173/src/providers/index.tsx:23:32)
+    at App @ http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-AV7OOAHN.js?v=c3d3de95:520
+[   52439ms] [ERROR] `DialogContent` requires a `DialogTitle` for the component to be accessible for screen reader users.
+
+If you want to hide the `DialogTitle`, you can wrap it with our VisuallyHidden component.
+
+For more information, see https://radix-ui.com/primitives/docs/components/dialog @ http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-FZ5ZOMIJ.js?v=c3d3de95:540
+[   52440ms] [WARNING] Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}. @ http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-FZ5ZOMIJ.js?v=c3d3de95:553
+[   52447ms] [ERROR] `DialogContent` requires a `DialogTitle` for the component to be accessible for screen reader users.
+
+If you want to hide the `DialogTitle`, you can wrap it with our VisuallyHidden component.
+
+For more information, see https://radix-ui.com/primitives/docs/components/dialog @ http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-FZ5ZOMIJ.js?v=c3d3de95:540
+[   52447ms] [WARNING] Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}. @ http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-FZ5ZOMIJ.js?v=c3d3de95:553
+[   53540ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8080/assistants/search:0
+[   53540ms] [ERROR] Failed to fetch cloud assistants from LangGraph API {error: ConnectionError: Unable to connect to LangGraph server. Please ensure the server is running and acc…, apiUrl: http://127.0.0.1:8080} @ http://localhost:5173/src/hooks/use-cloud-agents.tsx:75
+[   53542ms] [WARNING] Retrying assistant fetch with alternate API URL http://localhost:8080 @ http://localhost:5173/src/hooks/use-cloud-agents.tsx:84
+[   53583ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8080/oap_mcp:0
+[   53728ms] TypeError: Failed to fetch
+    at StreamableHTTPClientTransport.send (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/@modelcontextprotocol_sdk_client_streamableHttp__js.js?v=c3d3de95:1265:52)
+[   53786ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8080/threads/search:0
+[   54374ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8080/threads/search:0
+[   54376ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8080/assistants/search:0
+[   54379ms] [ERROR] Failed to fetch cloud assistants from LangGraph API {error: ConnectionError: Unable to connect to LangGraph server. Please ensure the server is running and acc…, apiUrl: http://127.0.0.1:8080} @ http://localhost:5173/src/hooks/use-cloud-agents.tsx:75
+[   54386ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8080/threads/search:0
+[   54394ms] [WARNING] Retrying assistant fetch with alternate API URL http://localhost:8080 @ http://localhost:5173/src/hooks/use-cloud-agents.tsx:84
+[   55914ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8080/assistants/search:0
+[   55915ms] [ERROR] Fallback API URL also failed ConnectionError: Unable to connect to LangGraph server. Please ensure the server is running and accessible. Original error: Failed to fetch
+    at Object.onFailedAttempt (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-V6DNZRRB.js?v=c3d3de95:1239:35)
+    at onAttemptFailure (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-V6DNZRRB.js?v=c3d3de95:284:17)
+    at pRetry (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-V6DNZRRB.js?v=c3d3de95:365:17)
+    at async http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-V6DNZRRB.js?v=c3d3de95:860:26 @ http://localhost:5173/src/hooks/use-cloud-agents.tsx:88
+[   56135ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8080/assistants/search:0
+[   56136ms] [ERROR] Fallback API URL also failed ConnectionError: Unable to connect to LangGraph server. Please ensure the server is running and accessible. Original error: Failed to fetch
+    at Object.onFailedAttempt (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-V6DNZRRB.js?v=c3d3de95:1239:35)
+    at onAttemptFailure (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-V6DNZRRB.js?v=c3d3de95:284:17)
+    at pRetry (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-V6DNZRRB.js?v=c3d3de95:365:17)
+    at async http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-V6DNZRRB.js?v=c3d3de95:860:26 @ http://localhost:5173/src/hooks/use-cloud-agents.tsx:88
+[   57420ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8080/threads/search:0
+[   64567ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8080/assistants/search:0
+[   64567ms] [ERROR] Failed to fetch cloud assistants from LangGraph API {error: ConnectionError: Unable to connect to LangGraph server. Please ensure the server is running and acc…, apiUrl: http://127.0.0.1:8080} @ http://localhost:5173/src/hooks/use-cloud-agents.tsx:75
+[   64568ms] [WARNING] Retrying assistant fetch with alternate API URL http://localhost:8080 @ http://localhost:5173/src/hooks/use-cloud-agents.tsx:84
+[   64600ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8080/oap_mcp:0
+[   64602ms] TypeError: Failed to fetch
+    at StreamableHTTPClientTransport.send (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/@modelcontextprotocol_sdk_client_streamableHttp__js.js?v=c3d3de95:1265:52)
+[   64683ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8080/threads/search:0
+[   64683ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8080/threads/search:0
+[   64684ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8080/assistants/search:0
+[   64684ms] [ERROR] Failed to fetch cloud assistants from LangGraph API {error: ConnectionError: Unable to connect to LangGraph server. Please ensure the server is running and acc…, apiUrl: http://127.0.0.1:8080} @ http://localhost:5173/src/hooks/use-cloud-agents.tsx:75
+[   64685ms] [WARNING] Retrying assistant fetch with alternate API URL http://localhost:8080 @ http://localhost:5173/src/hooks/use-cloud-agents.tsx:84
+[   64700ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8080/threads/search:0
+[   66651ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8080/threads/search:0
+[   66903ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8080/assistants/search:0
+[   66903ms] [ERROR] Fallback API URL also failed ConnectionError: Unable to connect to LangGraph server. Please ensure the server is running and accessible. Original error: Failed to fetch
+    at Object.onFailedAttempt (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-V6DNZRRB.js?v=c3d3de95:1239:35)
+    at onAttemptFailure (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-V6DNZRRB.js?v=c3d3de95:284:17)
+    at pRetry (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-V6DNZRRB.js?v=c3d3de95:365:17)
+    at async http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-V6DNZRRB.js?v=c3d3de95:860:26 @ http://localhost:5173/src/hooks/use-cloud-agents.tsx:88
+[   67029ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8080/assistants/search:0
+[   67030ms] [ERROR] Fallback API URL also failed ConnectionError: Unable to connect to LangGraph server. Please ensure the server is running and accessible. Original error: Failed to fetch
+    at Object.onFailedAttempt (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-V6DNZRRB.js?v=c3d3de95:1239:35)
+    at onAttemptFailure (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-V6DNZRRB.js?v=c3d3de95:284:17)
+    at pRetry (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-V6DNZRRB.js?v=c3d3de95:365:17)
+    at async http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-V6DNZRRB.js?v=c3d3de95:860:26 @ http://localhost:5173/src/hooks/use-cloud-agents.tsx:88
+[   69694ms] [ERROR] Warning: Function components cannot be given refs. Attempts to access this ref will fail. Did you mean to use React.forwardRef()?%s%s 
+
+Check the render method of `Primitive.div.SlotClone`. 
+    at DialogOverlay (http://localhost:5173/src/components/ui/dialog.tsx:102:3)
+    at http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-2XSBQFJG.js?v=c3d3de95:138:13
+    at http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-2XSBQFJG.js?v=c3d3de95:115:13
+    at http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-2XSBQFJG.js?v=c3d3de95:227:13
+    at http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-XPHNQGON.js?v=c3d3de95:257:22
+    at Presence (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-FZ5ZOMIJ.js?v=c3d3de95:53:11)
+    at Provider (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-2XSBQFJG.js?v=c3d3de95:54:15)
+    at DialogPortal (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-FZ5ZOMIJ.js?v=c3d3de95:330:11)
+    at DialogPortal (http://localhost:5173/src/components/ui/dialog.tsx:62:6)
+    at DialogContent (http://localhost:5173/src/components/ui/dialog.tsx:127:3)
+    at Provider (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-2XSBQFJG.js?v=c3d3de95:54:15)
+    at Dialog (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-FZ5ZOMIJ.js?v=c3d3de95:270:5)
+    at Dialog (http://localhost:5173/src/components/ui/dialog.tsx:22:6)
+    at ThreadList (http://localhost:5173/src/components/sidebar/thread-list.tsx:170:35)
+    at Suspense
+    at div
+    at SidebarContent (http://localhost:5173/src/components/ui/sidebar.tsx:538:27)
+    at div
+    at div
+    at div
+    at Sidebar (http://localhost:5173/src/components/ui/sidebar.tsx:161:3)
+    at AppSidebar (http://localhost:5173/src/components/sidebar/app-sidebar.tsx:60:33)
+    at div
+    at Provider (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-2XSBQFJG.js?v=c3d3de95:54:15)
+    at TooltipProvider (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/@radix-ui_react-tooltip.js?v=c3d3de95:621:5)
+    at _c (http://localhost:5173/src/components/ui/tooltip.tsx:21:50)
+    at SidebarProvider (http://localhost:5173/src/components/ui/sidebar.tsx:59:3)
+    at SidebarLayout (http://localhost:5173/src/components/sidebar/index.tsx:25:33)
+    at Router (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/react-router-dom.js?v=c3d3de95:7124:13)
+    at HashRouter (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/react-router-dom.js?v=c3d3de95:10362:3)
+    at MCPProvider (http://localhost:5173/src/providers/MCP.tsx:27:31)
+    at AgentProvider (http://localhost:5173/src/providers/Agent.tsx:31:33)
+    at QueryClientProvider (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-OVRCUNR3.js?v=c3d3de95:3103:3)
+    at ReactQueryProvider (http://localhost:5173/src/providers/QueryClient.tsx:23:3)
+    at AuthActionsProvider (http://localhost:5173/src/providers/Auth/AuthActions.tsx:24:3)
+    at AuthSessionProvider (http://localhost:5173/src/providers/Auth/AuthSession.tsx:24:3)
+    at AuthUserProvider (http://localhost:5173/src/providers/Auth/AuthUser.tsx:24:3)
+    at AuthProvider (http://localhost:5173/src/providers/Auth/index.tsx:48:3)
+    at V (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/next-themes.js?v=c3d3de95:44:25)
+    at J (http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/next-themes.js?v=c3d3de95:42:18)
+    at ThemeProvider (http://localhost:5173/src/providers/Theme.tsx:19:33)
+    at AppProviders (http://localhost:5173/src/providers/index.tsx:23:32)
+    at App @ http://localhost:5173/@fs/C:/Users/aryav/projects/doot-agent-electron/node_modules/.vite/deps/chunk-AV7OOAHN.js?v=c3d3de95:520

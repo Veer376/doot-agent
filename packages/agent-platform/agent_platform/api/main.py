@@ -27,10 +27,18 @@ if sys.platform == "win32" and hasattr(asyncio, "WindowsSelectorEventLoopPolicy"
 
 logger = logging.getLogger("agent_platform")
 
-# Define the project root where langgraph.json lives
-# In Docker: /orbit-agent (via mount)
-# In development: defaults to current working directory
-# Can be overridden via ORBIT_AGENT_ROOT environment variable
+# Define the project root where langgraph.json lives.  We try to be
+# clever for convenience:
+#
+# * In production (docker) the repository is mounted at `/orbit-agent` so
+#   the root is fixed by the deployment manifest.
+# * In development we normally run from the service directory
+#   (`packages/agent-platform`), but the configuration file lives at the
+#   repository root.  rather than forcing every developer to set an
+#   environment variable, the graph loader now searches parent directories
+#   for `langgraph.json` (see ``agent_platform.graph._resolve_config_path``),
+#   so the default value is simply the current working directory.  an
+#   explicit ``ORBIT_AGENT_ROOT`` may still be provided to override this.
 default_root = Path.cwd() if not os.getenv("ORBIT_AGENT_ROOT") else Path(os.getenv("ORBIT_AGENT_ROOT"))
 PROJECT_ROOT = Path(os.getenv("ORBIT_AGENT_ROOT", default_root))
 

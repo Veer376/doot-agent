@@ -11,7 +11,7 @@ requires-python = ">=3.13"
 dependencies = [
     # use a relative path reference so that others installing the project can resolve
     # the local package without hard‑coding an absolute drive path
-    "orbit-core @ file://../orbit-core",
+    "orbit-core @ file:c:/Users/aryav/projects/orbit-agent/packages/orbit-core",
     "fastapi>=0.116.1",
     "uvicorn>=0.35.0",
     "langgraph-checkpoint-postgres>=2.0.23",

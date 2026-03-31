@@ -547,7 +547,22 @@ def _resolve_config_path(
             "The 'root' parameter is used to locate the default 'langgraph.json' file."
         )
 
-    return (root / "langgraph.json").resolve()
+    # look for langgraph.json in the provided root; if not found, walk up
+    # the directory tree. this covers monorepo layouts where the service
+    # lives in a subdirectory (e.g. packages/agent-platform) but the
+    # manifest is kept at the repository root. the caller can still pass an
+    # explicit config_path or set LANGGRAPH_SPEC_PATH to override.
+    candidate = (root / "langgraph.json").resolve()
+    if candidate.exists():
+        return candidate
+
+    for parent in root.parents:
+        parent_candidate = (parent / "langgraph.json").resolve()
+        if parent_candidate.exists():
+            return parent_candidate
+
+    # nothing found; return the expected location (will trigger a warning later)
+    return candidate
 
 
 def _load_config(path: Path) -> Dict[str, str | dict]:

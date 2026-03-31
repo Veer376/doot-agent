@@ -60,7 +60,7 @@ async def process_run(run: Run):
         # "callbacks": [] # NOTE: Callbacks has whole different story which needs to be envisioned.
     }
     context = kwargs.get("context", {})
-    
+
     if user_id := kwargs.get("user_id", None):
         context["user_id"] = user_id
 
