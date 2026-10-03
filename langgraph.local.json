@@ -7,6 +7,7 @@
   },
   "env": {
     "ANTIGRAVITY_BASE_URL": "http://127.0.0.1:8877",
-    "ANTIGRAVITY_MODEL": "gemini-3.8-flash-low"
+    "ANTIGRAVITY_MODEL": "gemini-3.8-flash-low",
+    "LANGGRAPH_DISABLE_FILE_PERSISTENCE": "false"
   }
 }
