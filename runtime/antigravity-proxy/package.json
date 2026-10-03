@@ -1,0 +1,17 @@
+{
+  "name": "doot-antigravity-proxy-runtime",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Pinned local Antigravity proxy runtime for Doot",
+  "scripts": {
+    "postinstall": "patch-package",
+    "start": "node ./scripts/start.mjs",
+    "check": "node ./scripts/check.mjs"
+  },
+  "dependencies": {
+    "antigravity-claude-proxy": "2.8.6"
+  },
+  "devDependencies": {
+    "patch-package": "8.0.0"
+  }
+}

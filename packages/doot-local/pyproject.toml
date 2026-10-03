@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "doot-local"
+version = "0.1.0"
+description = "Local LangGraph agent backed by the Antigravity proxy"
+requires-python = ">=3.13"
+dependencies = [
+    "langchain==1.4.3",
+    "langchain-anthropic==1.7.5",
+    "langgraph==1.2.12",
+]
+
+[project.optional-dependencies]
+dev = [
+    "langgraph-sdk>=0.4.2,<0.5",
+    "pytest>=8.4,<9",
+    "pytest-asyncio>=1.2,<2",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["doot_local*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

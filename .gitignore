@@ -9,7 +9,10 @@ screenshots
 process_dom_test.py
 dom_tests.py
 dom.json
-tests
+/tests
+.venv/
+.pytest_cache/
+node_modules/
 .langgraph_api
 langgraph_api
 *.egg-info

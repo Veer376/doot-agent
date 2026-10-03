@@ -1,0 +1,12 @@
+{
+  "dependencies": [
+    "./packages/doot-local"
+  ],
+  "graphs": {
+    "doot": "doot_local.agent:graph"
+  },
+  "env": {
+    "ANTIGRAVITY_BASE_URL": "http://127.0.0.1:8877",
+    "ANTIGRAVITY_MODEL": "gemini-3.8-flash-low"
+  }
+}

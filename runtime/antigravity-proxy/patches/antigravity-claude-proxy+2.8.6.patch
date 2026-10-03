@@ -1,0 +1,214 @@
+diff --git a/node_modules/antigravity-claude-proxy/src/account-manager/credentials.js b/node_modules/antigravity-claude-proxy/src/account-manager/credentials.js
+index 129304f..520bf33 100644
+--- a/node_modules/antigravity-claude-proxy/src/account-manager/credentials.js
++++ b/node_modules/antigravity-claude-proxy/src/account-manager/credentials.js
+@@ -105,7 +105,24 @@ export async function getTokenForAccount(account, tokenCache, onInvalid, onSave)
+         // Extract from database
+         const dbPath = account.dbPath || ANTIGRAVITY_DB_PATH;
+         const authData = getAuthStatus(dbPath);
+-        token = authData.apiKey;
++        const tokenIsCurrent = !authData.expiry || authData.expiry > Date.now();
++
++        if (tokenIsCurrent) {
++            token = authData.apiKey;
++        } else if (authData.refreshToken) {
++            try {
++                const tokens = await refreshAccessToken(authData.refreshToken);
++                token = tokens.accessToken;
++                logger.success(`[AccountManager] Refreshed Antigravity database token for: ${account.email}`);
++            } catch (error) {
++                if (isNetworkError(error)) {
++                    throw new Error(`AUTH_NETWORK_ERROR: ${error.message}`);
++                }
++                throw new Error(`AUTH_INVALID: ${account.email}: ${error.message}`);
++            }
++        } else {
++            token = authData.apiKey;
++        }
+     }
+ 
+     // Cache the token
+diff --git a/node_modules/antigravity-claude-proxy/src/account-manager/storage.js b/node_modules/antigravity-claude-proxy/src/account-manager/storage.js
+index 65a3c33..6174256 100644
+--- a/node_modules/antigravity-claude-proxy/src/account-manager/storage.js
++++ b/node_modules/antigravity-claude-proxy/src/account-manager/storage.js
+@@ -84,10 +84,13 @@ export function loadDefaultAccount(dbPath) {
+             };
+ 
+             const tokenCache = new Map();
+-            tokenCache.set(account.email, {
+-                token: authData.apiKey,
+-                extractedAt: Date.now()
+-            });
++            const tokenIsCurrent = !authData.expiry || authData.expiry > Date.now();
++            if (tokenIsCurrent) {
++                tokenCache.set(account.email, {
++                    token: authData.apiKey,
++                    extractedAt: Date.now()
++                });
++            }
+ 
+             logger.info(`[AccountManager] Loaded default account: ${account.email}`);
+ 
+diff --git a/node_modules/antigravity-claude-proxy/src/auth/database.js b/node_modules/antigravity-claude-proxy/src/auth/database.js
+index a753667..855227a 100644
+--- a/node_modules/antigravity-claude-proxy/src/auth/database.js
++++ b/node_modules/antigravity-claude-proxy/src/auth/database.js
+@@ -23,6 +23,117 @@ const require = createRequire(import.meta.url);
+ let Database = null;
+ let moduleLoadError = null;
+ 
++const LEGACY_AUTH_KEY = 'antigravityAuthStatus';
++const UNIFIED_OAUTH_KEY = 'antigravityUnifiedStateSync.oauthToken';
++
++function readVarint(buffer, start) {
++    let value = 0n;
++    let shift = 0n;
++    let offset = start;
++
++    while (offset < buffer.length) {
++        const byte = BigInt(buffer[offset++]);
++        value |= (byte & 0x7fn) << shift;
++        if ((byte & 0x80n) === 0n) {
++            return { value, offset };
++        }
++        shift += 7n;
++        if (shift > 70n) {
++            throw new Error('Invalid protobuf varint');
++        }
++    }
++
++    throw new Error('Truncated protobuf varint');
++}
++
++function parseProtoFields(buffer) {
++    const fields = [];
++    let offset = 0;
++
++    while (offset < buffer.length) {
++        const tag = readVarint(buffer, offset);
++        offset = tag.offset;
++        const fieldNumber = Number(tag.value >> 3n);
++        const wireType = Number(tag.value & 0x7n);
++
++        if (wireType === 0) {
++            const item = readVarint(buffer, offset);
++            offset = item.offset;
++            fields.push({ fieldNumber, wireType, value: item.value });
++        } else if (wireType === 1) {
++            if (offset + 8 > buffer.length) throw new Error('Truncated protobuf fixed64');
++            fields.push({ fieldNumber, wireType, value: buffer.subarray(offset, offset + 8) });
++            offset += 8;
++        } else if (wireType === 2) {
++            const lengthItem = readVarint(buffer, offset);
++            offset = lengthItem.offset;
++            const length = Number(lengthItem.value);
++            if (!Number.isSafeInteger(length) || offset + length > buffer.length) {
++                throw new Error('Invalid protobuf length-delimited field');
++            }
++            fields.push({ fieldNumber, wireType, value: buffer.subarray(offset, offset + length) });
++            offset += length;
++        } else if (wireType === 5) {
++            if (offset + 4 > buffer.length) throw new Error('Truncated protobuf fixed32');
++            fields.push({ fieldNumber, wireType, value: buffer.subarray(offset, offset + 4) });
++            offset += 4;
++        } else {
++            throw new Error(`Unsupported protobuf wire type: ${wireType}`);
++        }
++    }
++
++    return fields;
++}
++
++function getLengthDelimitedField(buffer, fieldNumber) {
++    const field = parseProtoFields(buffer).find(
++        item => item.fieldNumber === fieldNumber && item.wireType === 2
++    );
++    return field?.value ?? null;
++}
++
++function getVarintField(buffer, fieldNumber) {
++    const field = parseProtoFields(buffer).find(
++        item => item.fieldNumber === fieldNumber && item.wireType === 0
++    );
++    return field?.value ?? null;
++}
++
++function decodeUnifiedOAuthState(encodedValue) {
++    const outer = Buffer.from(encodedValue, 'base64');
++    const wrapper = getLengthDelimitedField(outer, 1);
++    if (!wrapper) throw new Error('Unified OAuth state missing wrapper');
++
++    const wrapperFields = parseProtoFields(wrapper);
++    const sentinel = wrapperFields.find(
++        item => item.fieldNumber === 1 && item.wireType === 2
++    )?.value?.toString('utf8');
++    const payload = wrapperFields.find(
++        item => item.fieldNumber === 2 && item.wireType === 2
++    )?.value;
++
++    if (sentinel !== 'oauthTokenInfoSentinelKey' || !payload) {
++        throw new Error('Unified OAuth state has unexpected sentinel envelope');
++    }
++
++    const encodedTokenInfo = getLengthDelimitedField(payload, 1);
++    if (!encodedTokenInfo) throw new Error('Unified OAuth state missing token payload');
++
++    const tokenInfo = Buffer.from(encodedTokenInfo.toString('utf8'), 'base64');
++    const accessToken = getLengthDelimitedField(tokenInfo, 1)?.toString('utf8');
++    const refreshToken = getLengthDelimitedField(tokenInfo, 3)?.toString('utf8');
++    const expiryMessage = getLengthDelimitedField(tokenInfo, 4);
++    const expirySeconds = expiryMessage ? getVarintField(expiryMessage, 1) : null;
++
++    if (!accessToken) throw new Error('Unified OAuth state missing access token');
++
++    return {
++        apiKey: accessToken,
++        refreshToken: refreshToken || undefined,
++        expiry: expirySeconds === null ? undefined : Number(expirySeconds) * 1000
++    };
++}
++
+ /**
+  * Load the better-sqlite3 module with auto-rebuild on version mismatch
+  * Uses synchronous require to maintain API compatibility
+@@ -97,24 +208,27 @@ export function getAuthStatus(dbPath = ANTIGRAVITY_DB_PATH) {
+             fileMustExist: true
+         });
+ 
+-        // Prepare and execute query
+-        const stmt = db.prepare(
+-            "SELECT value FROM ItemTable WHERE key = 'antigravityAuthStatus'"
+-        );
+-        const row = stmt.get();
++        const legacyRow = db.prepare(
++            'SELECT value FROM ItemTable WHERE key = ?'
++        ).get(LEGACY_AUTH_KEY);
+ 
+-        if (!row || !row.value) {
+-            throw new Error('No auth status found in database');
++        if (legacyRow?.value) {
++            const authData = JSON.parse(legacyRow.value);
++            if (!authData.apiKey) {
++                throw new Error('Auth data missing apiKey field');
++            }
++            return authData;
+         }
+ 
+-        // Parse JSON value
+-        const authData = JSON.parse(row.value);
++        const unifiedRow = db.prepare(
++            'SELECT value FROM ItemTable WHERE key = ?'
++        ).get(UNIFIED_OAUTH_KEY);
+ 
+-        if (!authData.apiKey) {
+-            throw new Error('Auth data missing apiKey field');
++        if (unifiedRow?.value) {
++            return decodeUnifiedOAuthState(unifiedRow.value);
+         }
+ 
+-        return authData;
++        throw new Error('No auth status found in database');
+     } catch (error) {
+         // Enhance error messages for common issues
+         if (error.code === 'SQLITE_CANTOPEN') {
