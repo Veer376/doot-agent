@@ -20,23 +20,27 @@ def test_graph_uses_antigravity_proxy():
     assert "DOOT_GRAPH_OK" in result["messages"][-1].text
 
 
-def test_graph_executes_local_tool():
+@pytest.mark.asyncio
+async def test_graph_executes_local_tool():
     from doot_local.agent import graph
 
-    result = graph.invoke(
+    result = await graph.ainvoke(
         {
             "messages": [
                 HumanMessage(
                     content=(
-                        "You must call runtime_status. Then reply with only the model "
-                        "value returned by that tool."
+                        "You must call bridge_context. Then reply exactly DOOT_MCP_OK."
                     )
                 )
             ]
         }
     )
 
-    assert "gemini-3.8-flash-low" in result["messages"][-1].text
+    assert any(
+        message.type == "tool" and getattr(message, "name", None) == "bridge_context"
+        for message in result["messages"]
+    )
+    assert "DOOT_MCP_OK" in result["messages"][-1].text
 
 
 @pytest.mark.asyncio
@@ -48,12 +52,17 @@ async def test_graph_executes_local_command_tool():
             "messages": [
                 HumanMessage(
                     content=(
-                        "You must call run_local_command with the command "
-                        "printf AGENT_COMMAND_OK. Then reply with only the stdout."
+                        "First call bridge_context. Then call execute_command with "
+                        "command printf AGENT_COMMAND_OK and cwd /tmp. "
+                        "Reply with only AGENT_COMMAND_OK."
                     )
                 )
             ]
         }
     )
 
+    assert any(
+        message.type == "tool" and getattr(message, "name", None) == "execute_command"
+        for message in result["messages"]
+    )
     assert "AGENT_COMMAND_OK" in result["messages"][-1].text

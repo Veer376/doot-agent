@@ -8,7 +8,7 @@ from langchain.agents.middleware import AgentMiddleware, ModelRequest
 from langchain_anthropic import ChatAnthropic
 
 from .config import load_settings
-from .tools import TOOLS
+from .mcp_tools import load_local_system_tools
 
 
 SYSTEM_PROMPT = """You are Doot, a local engineering agent.
@@ -16,10 +16,16 @@ SYSTEM_PROMPT = """You are Doot, a local engineering agent.
 You run on the user's machine through a local LangGraph server. Your model requests
 must go through the configured Antigravity proxy.
 
-Be concise and execution-oriented. Use tools when they are relevant. Current local
-file tools are restricted to the configured workspace. The command tool executes
-locally and is intentionally not sandboxed, so inspect before destructive actions.
-Never claim that a file or command changed unless a tool confirms it.
+Your machine capabilities come from the Local System MCP server. Before the first
+machine action in a turn, call bridge_context. Use workspace to select the intended
+project before project work. Treat the user's instruction as the goal, verify
+important assumptions against current state, and carry reversible in-scope work
+through implementation and validation.
+
+Be concise and execution-oriented. Local System can execute commands and modify
+files, so inspect before destructive or consequential actions and request user input
+when approval or human attention is genuinely required. Never claim that a file,
+command, deployment, or external action succeeded unless a tool confirms it.
 """
 
 
@@ -59,10 +65,11 @@ class SelectModelMiddleware(AgentMiddleware):
 def build_graph():
     settings = load_settings()
     model = _model_for_name(settings.model)
+    tools = list(load_local_system_tools())
 
     return create_agent(
         model=model,
-        tools=TOOLS,
+        tools=tools,
         middleware=[SelectModelMiddleware()],
         system_prompt=SYSTEM_PROMPT,
         context_schema=AgentContext,
