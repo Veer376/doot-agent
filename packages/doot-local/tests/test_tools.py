@@ -1,3 +1,6 @@
+import asyncio
+import shlex
+
 import pytest
 
 from doot_local.tools import (
@@ -47,12 +50,42 @@ def test_write_and_replace_workspace_file(monkeypatch, tmp_path):
     assert (tmp_path / "nested/value.txt").read_text(encoding="utf-8") == "beta\n"
 
 
-def test_run_local_command(monkeypatch, tmp_path):
+@pytest.mark.asyncio
+async def test_run_local_command(monkeypatch, tmp_path):
     monkeypatch.setenv("DOOT_WORKSPACE_ROOT", str(tmp_path))
 
-    result = run_local_command.invoke(
+    result = await run_local_command.ainvoke(
         {"command": "printf 'COMMAND_OK'", "cwd": ".", "timeout_seconds": 5}
     )
 
     assert "exit_code=0" in result
     assert "COMMAND_OK" in result
+
+
+@pytest.mark.asyncio
+async def test_run_local_command_cancellation_kills_process_group(monkeypatch, tmp_path):
+    monkeypatch.setenv("DOOT_WORKSPACE_ROOT", str(tmp_path))
+    started = tmp_path / "started"
+    done = tmp_path / "done"
+    command = (
+        f"touch {shlex.quote(str(started))}; "
+        f"sleep 30; touch {shlex.quote(str(done))}"
+    )
+
+    task = asyncio.create_task(
+        run_local_command.ainvoke(
+            {"command": command, "cwd": ".", "timeout_seconds": 60}
+        )
+    )
+    for _ in range(100):
+        if started.exists():
+            break
+        await asyncio.sleep(0.05)
+
+    assert started.exists()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    await asyncio.sleep(0.2)
+    assert not done.exists()

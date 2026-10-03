@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-import subprocess
+import asyncio
+import os
+import signal
 from pathlib import Path
 
 from langchain_core.tools import tool
@@ -114,7 +116,7 @@ def replace_workspace_text(path: str, old_text: str, new_text: str) -> str:
 
 
 @tool
-def run_local_command(command: str, cwd: str = ".", timeout_seconds: int = 120) -> str:
+async def run_local_command(command: str, cwd: str = ".", timeout_seconds: int = 120) -> str:
     """Run a local shell command from a workspace directory and return exit/output.
 
     This tool is intentionally powerful and is not sandboxed. The LangGraph API
@@ -127,29 +129,68 @@ def run_local_command(command: str, cwd: str = ".", timeout_seconds: int = 120) 
     if not working_directory.is_dir():
         raise ValueError(f"cwd is not a directory: {cwd}")
 
-    try:
-        completed = subprocess.run(
-            command,
-            shell=True,
-            cwd=working_directory,
-            text=True,
-            capture_output=True,
-            timeout=timeout_seconds,
-            check=False,
-        )
-    except subprocess.TimeoutExpired as exc:
-        stdout = exc.stdout or ""
-        stderr = exc.stderr or ""
-        return (
-            f"Timed out after {timeout_seconds}s\n"
-            f"stdout:\n{stdout[-MAX_COMMAND_OUTPUT:]}\n"
-            f"stderr:\n{stderr[-MAX_COMMAND_OUTPUT:]}"
-        )
+    process = await asyncio.create_subprocess_shell(
+        command,
+        cwd=working_directory,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        start_new_session=os.name == "posix",
+    )
+    assert process.stdout is not None
+    assert process.stderr is not None
+    stdout_task = asyncio.create_task(process.stdout.read())
+    stderr_task = asyncio.create_task(process.stderr.read())
 
-    stdout = completed.stdout[-MAX_COMMAND_OUTPUT:]
-    stderr = completed.stderr[-MAX_COMMAND_OUTPUT:]
+    async def terminate_process_tree() -> None:
+        if process.returncode is not None:
+            return
+
+        try:
+            if os.name == "posix":
+                os.killpg(process.pid, signal.SIGTERM)
+            else:
+                process.terminate()
+        except ProcessLookupError:
+            return
+
+        try:
+            await asyncio.wait_for(process.wait(), timeout=2)
+            return
+        except TimeoutError:
+            pass
+
+        try:
+            if os.name == "posix":
+                os.killpg(process.pid, signal.SIGKILL)
+            else:
+                process.kill()
+        except ProcessLookupError:
+            return
+        await process.wait()
+
+    try:
+        try:
+            await asyncio.wait_for(process.wait(), timeout=timeout_seconds)
+        except TimeoutError:
+            await terminate_process_tree()
+            stdout_bytes, stderr_bytes = await asyncio.gather(stdout_task, stderr_task)
+            stdout = stdout_bytes.decode("utf-8", errors="replace")[-MAX_COMMAND_OUTPUT:]
+            stderr = stderr_bytes.decode("utf-8", errors="replace")[-MAX_COMMAND_OUTPUT:]
+            return (
+                f"Timed out after {timeout_seconds}s\n"
+                f"stdout:\n{stdout}\n"
+                f"stderr:\n{stderr}"
+            )
+    except asyncio.CancelledError:
+        await terminate_process_tree()
+        await asyncio.gather(stdout_task, stderr_task, return_exceptions=True)
+        raise
+
+    stdout_bytes, stderr_bytes = await asyncio.gather(stdout_task, stderr_task)
+    stdout = stdout_bytes.decode("utf-8", errors="replace")[-MAX_COMMAND_OUTPUT:]
+    stderr = stderr_bytes.decode("utf-8", errors="replace")[-MAX_COMMAND_OUTPUT:]
     return (
-        f"exit_code={completed.returncode}\n"
+        f"exit_code={process.returncode}\n"
         f"stdout:\n{stdout}\n"
         f"stderr:\n{stderr}"
     )

@@ -39,10 +39,11 @@ def test_graph_executes_local_tool():
     assert "gemini-3.8-flash-low" in result["messages"][-1].text
 
 
-def test_graph_executes_local_command_tool():
+@pytest.mark.asyncio
+async def test_graph_executes_local_command_tool():
     from doot_local.agent import graph
 
-    result = graph.invoke(
+    result = await graph.ainvoke(
         {
             "messages": [
                 HumanMessage(
