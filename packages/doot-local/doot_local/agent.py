@@ -9,6 +9,7 @@ from langchain_anthropic import ChatAnthropic
 
 from .config import load_settings
 from .mcp_tools import load_local_system_tools
+from .workspaces import prepare_workspace
 
 
 SYSTEM_PROMPT = """You are Doot, a local engineering agent.
@@ -31,6 +32,7 @@ command, deployment, or external action succeeded unless a tool confirms it.
 
 class AgentContext(TypedDict, total=False):
     model: str
+    workspace: str | None
 
 
 @lru_cache(maxsize=24)
@@ -62,6 +64,28 @@ class SelectModelMiddleware(AgentMiddleware):
         return await handler(_apply_selected_model(request))
 
 
+class WorkspaceMiddleware(AgentMiddleware):
+    async def abefore_agent(self, state, runtime):
+        context = runtime.context or {}
+        execution = runtime.execution_info
+        if not execution or not execution.thread_id:
+            raise ValueError("A LangGraph thread is required")
+        await prepare_workspace(str(execution.thread_id), context.get("workspace"))
+
+    async def awrap_model_call(self, request, handler):
+        from langchain_core.messages import SystemMessage
+
+        context = request.runtime.context or {}
+        workspace = context.get("workspace")
+        if workspace:
+            message = request.system_message
+            content = message.content if message else ""
+            blocks = [{"type": "text", "text": content}] if isinstance(content, str) else list(content)
+            blocks.append({"type": "text", "text": f"Current workspace: {workspace}"})
+            request = request.override(system_message=SystemMessage(content=blocks))
+        return await handler(request)
+
+
 def build_graph():
     settings = load_settings()
     model = _model_for_name(settings.model)
@@ -70,7 +94,7 @@ def build_graph():
     return create_agent(
         model=model,
         tools=tools,
-        middleware=[SelectModelMiddleware()],
+        middleware=[WorkspaceMiddleware(), SelectModelMiddleware()],
         system_prompt=SYSTEM_PROMPT,
         context_schema=AgentContext,
         name="doot",
