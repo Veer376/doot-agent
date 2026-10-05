@@ -8,6 +8,12 @@ from langchain.agents.middleware import AgentMiddleware, ModelRequest
 from langchain_anthropic import ChatAnthropic
 
 from .config import load_settings
+from .diagnostics import (
+    async_record_event,
+    async_record_exception,
+    record_event,
+    record_exception,
+)
 from .mcp_tools import load_local_system_tools
 from .workspaces import prepare_workspace
 
@@ -86,6 +92,177 @@ class WorkspaceMiddleware(AgentMiddleware):
         return await handler(request)
 
 
+class DiagnosticsMiddleware(AgentMiddleware):
+    def before_agent(self, state, runtime):
+        record_event(
+            "run.started",
+            runtime=runtime,
+            component="agent",
+            details={"context": runtime.context or {}},
+        )
+        return None
+
+    async def abefore_agent(self, state, runtime):
+        await async_record_event(
+            "run.started",
+            runtime=runtime,
+            component="agent",
+            details={"context": runtime.context or {}},
+        )
+        return None
+
+    def after_agent(self, state, runtime):
+        record_event("run.completed", runtime=runtime, component="agent")
+        return None
+
+    async def aafter_agent(self, state, runtime):
+        await async_record_event("run.completed", runtime=runtime, component="agent")
+        return None
+
+    def wrap_model_call(self, request, handler):
+        started = time.monotonic()
+        model_name = getattr(request.model, "model", None) or getattr(
+            request.model, "model_name", None
+        )
+        record_event(
+            "model.started",
+            runtime=request.runtime,
+            component="model",
+            details={"model": model_name},
+        )
+        try:
+            response = handler(request)
+        except BaseException as exc:
+            record_exception(
+                "model.error",
+                exc,
+                runtime=request.runtime,
+                component="model",
+                details={
+                    "model": model_name,
+                    "duration_ms": round((time.monotonic() - started) * 1000, 2),
+                },
+            )
+            raise
+        record_event(
+            "model.completed",
+            runtime=request.runtime,
+            component="model",
+            details={
+                "model": model_name,
+                "duration_ms": round((time.monotonic() - started) * 1000, 2),
+            },
+        )
+        return response
+
+    async def awrap_model_call(self, request, handler):
+        started = time.monotonic()
+        model_name = getattr(request.model, "model", None) or getattr(
+            request.model, "model_name", None
+        )
+        await async_record_event(
+            "model.started",
+            runtime=request.runtime,
+            component="model",
+            details={"model": model_name},
+        )
+        try:
+            response = await handler(request)
+        except BaseException as exc:
+            await async_record_exception(
+                "model.error",
+                exc,
+                runtime=request.runtime,
+                component="model",
+                details={
+                    "model": model_name,
+                    "duration_ms": round((time.monotonic() - started) * 1000, 2),
+                },
+            )
+            raise
+        await async_record_event(
+            "model.completed",
+            runtime=request.runtime,
+            component="model",
+            details={
+                "model": model_name,
+                "duration_ms": round((time.monotonic() - started) * 1000, 2),
+            },
+        )
+        return response
+
+    def wrap_tool_call(self, request, handler):
+        started = time.monotonic()
+        tool_call = request.tool_call
+        details = {"tool": tool_call.get("name"), "args": tool_call.get("args", {})}
+        record_event(
+            "tool.started",
+            runtime=request.runtime,
+            component="tool",
+            details=details,
+        )
+        try:
+            result = handler(request)
+        except BaseException as exc:
+            record_exception(
+                "tool.error",
+                exc,
+                runtime=request.runtime,
+                component="tool",
+                details={
+                    **details,
+                    "duration_ms": round((time.monotonic() - started) * 1000, 2),
+                },
+            )
+            raise
+        record_event(
+            "tool.completed",
+            runtime=request.runtime,
+            component="tool",
+            details={
+                **details,
+                "status": getattr(result, "status", None),
+                "duration_ms": round((time.monotonic() - started) * 1000, 2),
+            },
+        )
+        return result
+
+    async def awrap_tool_call(self, request, handler):
+        started = time.monotonic()
+        tool_call = request.tool_call
+        details = {"tool": tool_call.get("name"), "args": tool_call.get("args", {})}
+        await async_record_event(
+            "tool.started",
+            runtime=request.runtime,
+            component="tool",
+            details=details,
+        )
+        try:
+            result = await handler(request)
+        except BaseException as exc:
+            await async_record_exception(
+                "tool.error",
+                exc,
+                runtime=request.runtime,
+                component="tool",
+                details={
+                    **details,
+                    "duration_ms": round((time.monotonic() - started) * 1000, 2),
+                },
+            )
+            raise
+        await async_record_event(
+            "tool.completed",
+            runtime=request.runtime,
+            component="tool",
+            details={
+                **details,
+                "status": getattr(result, "status", None),
+                "duration_ms": round((time.monotonic() - started) * 1000, 2),
+            },
+        )
+        return result
+
 def build_graph():
     settings = load_settings()
     model = _model_for_name(settings.model)
@@ -94,7 +271,7 @@ def build_graph():
     return create_agent(
         model=model,
         tools=tools,
-        middleware=[WorkspaceMiddleware(), SelectModelMiddleware()],
+        middleware=[DiagnosticsMiddleware(), WorkspaceMiddleware(), SelectModelMiddleware()],
         system_prompt=SYSTEM_PROMPT,
         context_schema=AgentContext,
         name="doot",
