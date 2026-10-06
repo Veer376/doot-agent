@@ -1,91 +1,49 @@
-import asyncio
-import shlex
+from types import SimpleNamespace
 
 import pytest
-
-from doot_local.tools import (
-    list_workspace,
-    read_workspace_file,
-    replace_workspace_text,
-    run_local_command,
-    write_workspace_file,
-)
+from mcp.types import Tool
+from doot_local.local_system import bridge_tool, effective_arguments
+from doot_local.permissions import operation
 
 
-def test_list_workspace_is_scoped(monkeypatch, tmp_path):
-    (tmp_path / "alpha.txt").write_text("alpha\n", encoding="utf-8")
+def runtime(path):
+    return SimpleNamespace(context={"workspace": str(path)})
+
+
+def test_mcp_tool_schema_preserved():
+    item = bridge_tool(Tool(name="execute_command", description="Run", inputSchema={"type": "object", "properties": {"command": {"type": "string"}}, "required": ["command"]}))
+    assert item.name == "execute_command"
+    assert "command" in item.args
+    assert "runtime" not in item.args
+    assert "runtime" in item._injected_args_keys
+
+
+def test_explicit_selected_workspace(monkeypatch, tmp_path):
     monkeypatch.setenv("DOOT_WORKSPACE_ROOT", str(tmp_path))
-
-    result = list_workspace.invoke({"path": "."})
-
-    assert "alpha.txt" in result
+    assert effective_arguments("execute_command", {"command": "pwd"}, runtime(tmp_path))["cwd"] == str(tmp_path)
+    assert effective_arguments("apply_patch", {"input": "patch"}, runtime(tmp_path))["cwd"] == str(tmp_path)
 
 
-def test_read_workspace_file(monkeypatch, tmp_path):
-    (tmp_path / "sample.txt").write_text("one\ntwo\nthree\n", encoding="utf-8")
+@pytest.mark.parametrize("tool", ["execute_command", "apply_patch"])
+def test_workspace_escape_rejected(monkeypatch, tmp_path, tool):
     monkeypatch.setenv("DOOT_WORKSPACE_ROOT", str(tmp_path))
-
-    result = read_workspace_file.invoke(
-        {"path": "sample.txt", "start_line": 2, "end_line": 3}
-    )
-
-    assert result == "2: two\n3: three"
+    with pytest.raises(ValueError, match="outside"):
+        effective_arguments(tool, {"cwd": ".."}, runtime(tmp_path))
 
 
-def test_workspace_escape_is_rejected(monkeypatch, tmp_path):
+def test_workspace_open_cannot_desynchronize_doot(monkeypatch, tmp_path):
     monkeypatch.setenv("DOOT_WORKSPACE_ROOT", str(tmp_path))
+    (tmp_path / "nested").mkdir()
+    with pytest.raises(ValueError, match="Select a different workspace"):
+        effective_arguments("workspace", {"action": "open", "path": "nested"}, runtime(tmp_path))
 
-    with pytest.raises(ValueError, match="outside the configured workspace"):
-        read_workspace_file.invoke({"path": "../outside.txt"})
+
+def test_grants_match_mcp_command_and_patch(tmp_path):
+    assert operation("execute_command", {"command": "pwd"}, str(tmp_path)) != operation("execute_command", {"command": "ls"}, str(tmp_path))
+    assert operation("apply_patch", {"input": "first"}, str(tmp_path)) != operation("apply_patch", {"input": "second"}, str(tmp_path))
 
 
-def test_write_and_replace_workspace_file(monkeypatch, tmp_path):
+def test_patch_paths_cannot_escape_selected_workspace(monkeypatch, tmp_path):
     monkeypatch.setenv("DOOT_WORKSPACE_ROOT", str(tmp_path))
-
-    write_workspace_file.invoke({"path": "nested/value.txt", "content": "alpha\n"})
-    replace_workspace_text.invoke(
-        {"path": "nested/value.txt", "old_text": "alpha", "new_text": "beta"}
-    )
-
-    assert (tmp_path / "nested/value.txt").read_text(encoding="utf-8") == "beta\n"
-
-
-@pytest.mark.asyncio
-async def test_run_local_command(monkeypatch, tmp_path):
-    monkeypatch.setenv("DOOT_WORKSPACE_ROOT", str(tmp_path))
-
-    result = await run_local_command.ainvoke(
-        {"command": "printf 'COMMAND_OK'", "cwd": ".", "timeout_seconds": 5}
-    )
-
-    assert "exit_code=0" in result
-    assert "COMMAND_OK" in result
-
-
-@pytest.mark.asyncio
-async def test_run_local_command_cancellation_kills_process_group(monkeypatch, tmp_path):
-    monkeypatch.setenv("DOOT_WORKSPACE_ROOT", str(tmp_path))
-    started = tmp_path / "started"
-    done = tmp_path / "done"
-    command = (
-        f"touch {shlex.quote(str(started))}; "
-        f"sleep 30; touch {shlex.quote(str(done))}"
-    )
-
-    task = asyncio.create_task(
-        run_local_command.ainvoke(
-            {"command": command, "cwd": ".", "timeout_seconds": 60}
-        )
-    )
-    for _ in range(100):
-        if started.exists():
-            break
-        await asyncio.sleep(0.05)
-
-    assert started.exists()
-    task.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await task
-
-    await asyncio.sleep(0.2)
-    assert not done.exists()
+    with pytest.raises(ValueError, match="outside"):
+        effective_arguments("apply_patch", {"input": "*** Begin Patch\n*** Add File: ../escape.txt\n+bad\n*** End Patch"}, runtime(tmp_path))

@@ -2,7 +2,6 @@ import asyncio
 import time
 import urllib.error
 import urllib.request
-
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -17,7 +16,8 @@ from .diagnostics import (
     record_event,
 )
 from .config import load_settings
-from .workspaces import validate_workspace, workspace_catalog
+from .workspaces import register_workspace, workspace_catalog
+from .permissions import permission_settings, set_default_mode, revoke_grant
 
 
 def _probe(url: str) -> dict:
@@ -48,6 +48,7 @@ async def _component_health() -> dict:
         )
     }
 
+
 async def workspaces(request: Request):
     try:
         catalog = await workspace_catalog()
@@ -56,13 +57,26 @@ async def workspaces(request: Request):
             path = body.get("path")
             if not isinstance(path, str) or not path.strip():
                 return JSONResponse({"error": "Enter a workspace directory"}, status_code=400)
-            selected = validate_workspace(path, catalog.get("authorizedProjectRoots", []))
+            selected = await register_workspace(path)
             return JSONResponse({"path": selected, "name": selected.rstrip("/").split("/")[-1]})
         return JSONResponse({"projects": catalog.get("savedProjects", []), "roots": catalog.get("authorizedProjectRoots", [])})
     except (ValueError, FileNotFoundError, NotADirectoryError) as exc:
         return JSONResponse({"error": str(exc)}, status_code=400)
     except Exception:
-        return JSONResponse({"error": "Local System workspace service is unavailable"}, status_code=503)
+        return JSONResponse({"error": "Workspace service is unavailable"}, status_code=503)
+
+
+async def permissions(request: Request):
+    try:
+        if request.method == "PATCH":
+            body = await request.json()
+            await asyncio.to_thread(set_default_mode, body.get("default_mode"))
+        elif request.method == "DELETE":
+            body = await request.json()
+            await asyncio.to_thread(revoke_grant, body["workspace"], body["scope"], body["operation"])
+        return JSONResponse(await asyncio.to_thread(permission_settings))
+    except (ValueError, KeyError, TypeError) as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
 
 
 async def diagnostics_events(request: Request):
@@ -158,8 +172,10 @@ async def diagnostics_health(request: Request):
         }
     )
 
+
 app = Starlette(routes=[
     Route("/workspaces", workspaces, methods=["GET", "POST"]),
+    Route("/permissions", permissions, methods=["GET", "PATCH", "DELETE"]),
     Route("/diagnostics", diagnostics_events, methods=["GET", "POST"]),
     Route("/diagnostics/analyze", diagnostics_analyze, methods=["POST"]),
     Route("/diagnostics/health", diagnostics_health, methods=["GET"]),

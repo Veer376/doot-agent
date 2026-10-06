@@ -10,10 +10,10 @@ requires-python = ">=3.13"
 dependencies = [
     "langchain==1.4.3",
     "langchain-anthropic==1.7.5",
-    "langchain-mcp-adapters==0.3.0",
     "langgraph==1.2.12",
-    "mcp==1.28.0",
     "starlette>=0.48,<2",
+    "mcp>=1.28,<2",
+    "python-dotenv>=1,<2",
 ]
 
 [project.optional-dependencies]

@@ -104,7 +104,7 @@ async def test_thread_stream_and_persistence():
     )
 
     last_message = second["messages"][-1]
-    assert "ORBIT_731" in last_message["content"]
+    assert "ORBIT_731" in _message_text(last_message["content"])
 
 
 @pytest.mark.asyncio
@@ -120,7 +120,7 @@ async def test_tool_call_is_visible_in_thread_state():
             "messages": [
                 {
                     "role": "user",
-                    "content": "You must call bridge_context. Then reply exactly API_MCP_OK.",
+                    "content": "You must call workspace with action list. Then reply exactly API_NATIVE_OK.",
                 }
             ]
         },
@@ -130,7 +130,30 @@ async def test_tool_call_is_visible_in_thread_state():
     messages = state["values"]["messages"]
 
     assert any(
-        message.get("type") == "tool" and message.get("name") == "bridge_context"
+        message.get("type") == "tool" and message.get("name") == "workspace"
         for message in messages
     )
-    assert "API_MCP_OK" in _message_text(messages[-1]["content"])
+    assert "API_NATIVE_OK" in _message_text(messages[-1]["content"])
+
+
+@pytest.mark.asyncio
+async def test_native_file_approval_once_and_rejection(tmp_path):
+    import httpx
+    client = get_client(url=API_URL)
+    async with httpx.AsyncClient() as http:
+        response = await http.post(f"{API_URL}/workspaces", json={"path": str(tmp_path)})
+        response.raise_for_status()
+    context = {"workspace": str(tmp_path), "permission_mode": "ask"}
+    thread = await client.threads.create(metadata={"workspace": str(tmp_path), "permission_mode": "ask"})
+    paused = await client.runs.wait(thread["thread_id"], "doot", input={"messages": [{"role":"user", "content":"Call apply_patch to create pending.txt with content APPROVAL_ONCE_OK followed by a newline. Do not execute shell commands. After the write reply exactly FILE_DONE."}]}, context=context)
+    assert not (tmp_path / "pending.txt").exists()
+    state = await client.threads.get_state(thread["thread_id"])
+    interrupt = next(item for task in state["tasks"] for item in task.get("interrupts", []))
+    assert interrupt["value"]["action_requests"][0]["name"] == "apply_patch"
+    await client.runs.wait(thread["thread_id"], "doot", command={"resume": {interrupt["id"]: {"decisions": [{"type":"approve"}]}}}, context=context)
+    assert (tmp_path / "pending.txt").read_text() == "APPROVAL_ONCE_OK\n"
+    paused = await client.runs.wait(thread["thread_id"], "doot", input={"messages":[{"role":"user","content":"Call apply_patch to create denied.txt with content SHOULD_NOT_EXIST. Do not use shell."}]}, context=context)
+    state = await client.threads.get_state(thread["thread_id"])
+    interrupt = next(item for task in state["tasks"] for item in task.get("interrupts", []))
+    await client.runs.wait(thread["thread_id"], "doot", command={"resume": {interrupt["id"]: {"decisions": [{"type":"reject", "message":"Denied. Stop and do not retry."}]}}}, context=context)
+    assert not (tmp_path / "denied.txt").exists()
