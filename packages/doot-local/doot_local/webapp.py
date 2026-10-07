@@ -16,6 +16,7 @@ from .diagnostics import (
     record_event,
 )
 from .config import load_settings
+from .models import local_models
 from .workspaces import register_workspace, workspace_catalog
 from .permissions import permission_settings, set_default_mode, revoke_grant
 
@@ -47,6 +48,17 @@ async def _component_health() -> dict:
             _probe, f"{settings.proxy_url.rstrip('/')}/health"
         )
     }
+
+
+async def models(request: Request):
+    try:
+        catalog = await asyncio.to_thread(local_models)
+        return JSONResponse({"models": [model.as_dict() for model in catalog]})
+    except Exception as exc:
+        return JSONResponse(
+            {"error": "Model catalog is unavailable", "detail": str(exc)},
+            status_code=503,
+        )
 
 
 async def workspaces(request: Request):
@@ -175,6 +187,7 @@ async def diagnostics_health(request: Request):
 
 app = Starlette(routes=[
     Route("/workspaces", workspaces, methods=["GET", "POST"]),
+    Route("/models", models, methods=["GET"]),
     Route("/permissions", permissions, methods=["GET", "PATCH", "DELETE"]),
     Route("/diagnostics", diagnostics_events, methods=["GET", "POST"]),
     Route("/diagnostics/analyze", diagnostics_analyze, methods=["POST"]),

@@ -16,6 +16,7 @@ from .diagnostics import (
     record_event,
     record_exception,
 )
+from .models import resolve_agent_model
 from .local_system import load_tools
 from .permissions import PermissionMiddleware, MODES, default_mode, workspace_for
 from .workspaces import prepare_workspace
@@ -102,6 +103,8 @@ Verify and communicate
 
 class AgentContext(TypedDict, total=False):
     model: str
+    available_models: list[str]
+    default_model: str
     workspace: str | None
     permission_mode: str
     approval_grants: list[dict]
@@ -122,10 +125,23 @@ def _model_for_name(model_name: str) -> ChatAnthropic:
 
 def _apply_selected_model(request: ModelRequest[AgentContext]):
     context = request.runtime.context or {}
-    selected = context.get("model") if isinstance(context, dict) else None
-    if selected:
-        return request.override(model=_model_for_name(str(selected)))
-    return request
+    if not isinstance(context, dict):
+        return request
+
+    selected = context.get("model")
+    available = context.get("available_models")
+    default_model = context.get("default_model")
+    available_models = (
+        [str(model) for model in available if model]
+        if isinstance(available, list)
+        else None
+    )
+    runtime_model = resolve_agent_model(
+        str(selected) if selected else None,
+        available_models=available_models,
+        default_model=str(default_model) if default_model else None,
+    )
+    return request.override(model=_model_for_name(runtime_model))
 
 
 class SelectModelMiddleware(AgentMiddleware):
