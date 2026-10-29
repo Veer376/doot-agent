@@ -6,6 +6,7 @@ A personal agent engineering project by [Aryaveer](https://github.com/Veer376): 
 
 <!-- demo:start -->
 [Watch the original browser-agent demo](https://github.com/Veer376/doot-agent-web/blob/main/public/dootagent-demo.mp4). This historical clip shows the earlier browser-agent workflow. The ticket-triage example below is a separate release-validation path.
+[Current approval/resume verification](https://github.com/Veer376/doot-agent-web/blob/main/public/showcase/approval-resume.mp4) — a separate real-model run on synthetic data.
 <!-- demo:end -->
 
 ## What to look at
