@@ -11,7 +11,7 @@ from uuid import UUID, uuid4
 
 import orjson
 import structlog
-from langgraph.checkpoint.serde.jsonplus import _msgpack_ext_hook_to_json
+
 from langgraph.pregel.debug import CheckpointPayload
 from langgraph.types import StateSnapshot
 from langgraph_sdk import Auth

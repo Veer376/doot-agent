@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 Simple test to verify Playwright WebSocket connection.
+Test: hi
 """
 import asyncio
 from playwright.async_api import async_playwright

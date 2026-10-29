@@ -47,3 +47,27 @@ def test_patch_paths_cannot_escape_selected_workspace(monkeypatch, tmp_path):
     monkeypatch.setenv("DOOT_WORKSPACE_ROOT", str(tmp_path))
     with pytest.raises(ValueError, match="outside"):
         effective_arguments("apply_patch", {"input": "*** Begin Patch\n*** Add File: ../escape.txt\n+bad\n*** End Patch"}, runtime(tmp_path))
+
+
+def test_images_reach_model_as_multimodal_blocks():
+    from mcp.types import CallToolResult, ImageContent, TextContent
+    from doot_local.local_system import result_message
+    result = CallToolResult(content=[TextContent(type="text", text="First image"), ImageContent(type="image", data="aGVsbG8=", mimeType="image/png"), TextContent(type="text", text="Second image"), ImageContent(type="image", data="d29ybGQ=", mimeType="image/jpeg")])
+    message = result_message("view_image", result, "image-call")
+    assert message.content[1]["image_url"]["url"] == "data:image/png;base64,aGVsbG8="
+    assert message.content[2]["text"] == "Second image"
+    assert message.content[3]["image_url"]["url"] == "data:image/jpeg;base64,d29ybGQ="
+    assert message.status == "success"
+
+
+def test_image_paths_are_scoped(monkeypatch, tmp_path):
+    monkeypatch.setenv("DOOT_WORKSPACE_ROOT", str(tmp_path))
+    assert effective_arguments("view_image", {"paths": ["photo.png"]}, runtime(tmp_path))["paths"] == [str(tmp_path / "photo.png")]
+    with pytest.raises(ValueError, match="outside"):
+        effective_arguments("view_image", {"paths": ["../photo.png"]}, runtime(tmp_path))
+
+
+def test_view_image_requires_no_approval(tmp_path):
+    from doot_local.permissions import requires_review
+    request = SimpleNamespace(tool_call={"name":"view_image", "args":{"paths":["photo.png"]}}, runtime=SimpleNamespace(context={"permission_mode":"ask"}))
+    assert not requires_review(request)

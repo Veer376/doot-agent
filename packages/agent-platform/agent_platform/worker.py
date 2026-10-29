@@ -1,190 +1,63 @@
-import sys
+"""Single-process run workers with replayable Redis events and PostgreSQL checkpoints."""
 import asyncio
 import json
-from langchain_core.messages import BaseMessage
-import json
-from orbit_core.clients import get_redis
-import logging
-from .schema import Run
-from .utils import map_cmd
+from datetime import datetime, UTC
+from langchain_core.load.dump import dumpd
+from langchain_core.messages import message_chunk_to_message
+from langgraph.types import Command
+from orbit_core.clients import get_redis, get_supabase
 from .graph import get_graph
 
-logger = logging.getLogger("worker")
+TASKS: dict[str, asyncio.Task] = {}
+def now(): return datetime.now(UTC).isoformat()
+def encode(value):
+    if hasattr(value, "model_dump"): return value.model_dump(mode="json")
+    if hasattr(value, "_asdict"): return value._asdict()
+    return str(value)
 
+async def store_run(run):
+    redis = await get_redis()
+    await redis.set(f"run:{run['run_id']}", json.dumps(run, default=encode), ex=86400)
+    await redis.sadd(f"thread:{run['thread_id']}:runs", run['run_id'])
+    await redis.expire(f"thread:{run['thread_id']}:runs", 86400)
 
-async def process_run(run: Run):
-    """Process a run and stream the results via Redis"""
-    # FIXME: validate_run, and handle based on multitask_strategy.
+async def publish(run, event, data):
+    redis = await get_redis()
+    await redis.xadd(f"run:{run['run_id']}:events", {"event":event,"data":json.dumps(data,default=encode)}, maxlen=5000)
+    await redis.expire(f"run:{run['run_id']}:events",86400)
 
-    run_id = run["run_id"]
-    assistant_id = run["assistant_id"]
-    if not assistant_id:
-        raise ValueError(f"Run {run_id} does not have an assistant_id")
-
-    thread_id = run["thread_id"]
-    metadata = run.get("metadata", {})
-    multitask_strategy = run.get("multitask_strategy", "enqueue")
-    kwargs = run.get("kwargs", {})
-
-    # NOTE: Assumes assistant and graph IDs are identical — a deliberate simplification while assistant creation is not supported.
-    # TODO: Task - implement assistant creation.
-    graph = await get_graph(assistant_id)
-
-    webhook = kwargs.get("webhook", None)
-    stream_resumable = kwargs.get(
-        "stream_resumable", False
-    )  # TODO: Implement stream resumable handling
-    feedback_keys = kwargs.get("feedback_keys", None)
-
-    if metadata or feedback_keys or webhook:
-        logger.warning(
-            f"Run {run_id} has metadata or feedback_keys, but handling not implemented yet"
-        )
-
-    input = kwargs.get("input", {})
-    if cmd := kwargs.get("command", None):
-        input = map_cmd(cmd)
-
-    config: dict = kwargs.get("config", {})
-    configurable = config.pop("configurable", {})
-
-    config = {
-        **config,
-        "configurable": {
-            "thread_id": thread_id,
-            **kwargs.get("checkpoint", {}),
-            **configurable,
-        },
-        "recursion_limit": 5000,
-        # "run_id": run_id
-        # "callbacks": [] # NOTE: Callbacks has whole different story which needs to be envisioned.
-    }
-    context = kwargs.get("context", {})
-
-    if user_id := kwargs.get("user_id", None):
-        context["user_id"] = user_id
-
-    redis_client = await get_redis()
-
+async def process_run(run):
+    db = await get_supabase()
+    kwargs = run.pop("kwargs", {})
     try:
-        run["status"] = "running"
-
-        async for stream_mode, chunk in graph.astream(
-            input=input,
-            config=config,
-            context=context,
-            stream_mode=["messages", "values", "updates"],
-            interrupt_after=kwargs.get("interrupt_after", None),
-            interrupt_before=kwargs.get("interrupt_before", None),
-            durability=kwargs.get("durability", "async"),
-            # subgraphs=kwargs.get("subgraphs", True), # FIXME: add subgraph destructuring
-        ):
-
-            if stream_mode == "values":
-                # Serialize messages if they exist
-                data = {}
-
-                if messages := chunk.get("messages", None):
-                    dict_messages = [
-                        (
-                            msg.model_dump(exclude_none=True)
-                            if isinstance(msg, BaseMessage)
-                            else msg
-                        )
-                        for msg in messages
-                    ]
-                    data["messages"] = dict_messages
-
-                # Include other state fields (browser_snapshot, etc.)
-                for key, value in chunk.items():
-                    if key != "messages":  # Already handled above
-                        data[key] = value
-
-                await redis_client.publish(
-                    f"run:{run_id}:stream",
-                    json.dumps(
-                        {
-                            "event": "values",
-                            "data": data,
-                            "run_id": run_id,
-                            "thread_id": thread_id,
-                        }
-                    ),
-                )
-
-            if stream_mode == "messages":
-                if isinstance(chunk, tuple):
-                    chunk_list = []
-                    for item in chunk:
-                        if isinstance(item, BaseMessage):
-                            # TODO: create a custom serialization method to handle empty fields.
-                            chunk_list.append(item.model_dump(exclude_none=True))
-                        else:
-                            chunk_list.append(item)
-
-                await redis_client.publish(
-                    f"run:{run_id}:stream",
-                    json.dumps(
-                        {
-                            "event": "messages",
-                            "data": chunk_list,
-                            "run_id": run_id,
-                            "thread_id": thread_id,
-                        }
-                    ),
-                )
-
-        await redis_client.publish(
-            f"run:{run_id}:stream",
-            json.dumps(
-                {
-                    "event": "status",
-                    "status": "completed",
-                    "run_id": run_id,
-                    "thread_id": thread_id,
-                }
-            ),
-        )
-
-    except Exception as e:
-        import traceback
-
-        traceback.print_exc()
-        run["status"] = "error"
-        await redis_client.publish(
-            f"run:{run_id}:stream",
-            json.dumps(
-                {
-                    "type": "status",
-                    "status": "error",
-                    "error": str(e),
-                    "run_id": run_id,
-                    "thread_id": thread_id,
-                }
-            ),
-        )
-        print(f"Error processing run {run_id}: {e}")
-
-
-async def main():
-
-    while True:
-        print("Waiting for work...")
-        redis_client = await get_redis()
-        result = await redis_client.blpop("run:queue", timeout=3)
-
-        if result:
-            run_id = result[1]
-            print(f"Received run with ID: {run_id}")
-            asyncio.create_task(process_run(run_id))
-
-
-if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        print("Shutting down...")
-        sys.exit(0)
-    except Exception as e:
-        print(f"Error: {e}")
-        sys.exit(1)
+        run.update(status="running",updated_at=now());await store_run(run)
+        await db.table("threads").update({"status":"busy"}).eq("thread_id",run['thread_id']).eq("user_id",run['user_id']).execute()
+        graph = await get_graph(run['assistant_id'])
+        config = {**kwargs.get("config", {}), "configurable": {"thread_id":run['thread_id']},"recursion_limit":30}
+        command = kwargs.get("command")
+        input_value = Command(**command) if command else kwargs.get("input")
+        await publish(run,"metadata",{"run_id":run['run_id'],"thread_id":run['thread_id'],"attempt":1})
+        async for mode,chunk in graph.astream(input_value,config=config,stream_mode=["messages","values"],context=kwargs.get("context")):
+            if mode == "messages":
+                msg,metadata=chunk
+                await publish(run,"messages",[message_chunk_to_message(msg).model_dump(mode="json"),metadata])
+            else:
+                await publish(run,"values",chunk)
+        snapshot=await graph.aget_state(config)
+        interrupted=bool(snapshot.next)
+        run.update(status="interrupted" if interrupted else "success",updated_at=now())
+        await db.table("threads").update({"status":"interrupted" if interrupted else "idle",
+            "values":json.loads(json.dumps(snapshot.values,default=encode))}).eq("thread_id",run['thread_id']).eq("user_id",run['user_id']).execute()
+        if interrupted:
+            await publish(run,"updates",{"__interrupt__":[encode(i) for t in snapshot.tasks for i in t.interrupts]})
+    except asyncio.CancelledError:
+        run.update(status="interrupted",updated_at=now())
+        await db.table("threads").update({"status":"idle"}).eq("thread_id",run['thread_id']).eq("user_id",run['user_id']).execute()
+    except Exception as exc:
+        run.update(status="error",updated_at=now())
+        await publish(run,"error",{"error":type(exc).__name__,"message":str(exc)})
+        await db.table("threads").update({"status":"error"}).eq("thread_id",run['thread_id']).eq("user_id",run['user_id']).execute()
+    finally:
+        await store_run(run)
+        await publish(run,"end",{})
+        TASKS.pop(run['run_id'],None)

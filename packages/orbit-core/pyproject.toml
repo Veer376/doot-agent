@@ -6,28 +6,22 @@ build-backend = "setuptools.build_meta"
 name = "orbit-core"
 version = "0.1.0"
 description = "Core library for Orbit Agent - agents, tools, and utilities"
-readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "asyncpg>=0.29.0",
     "colorama>=0.4.6",
     "google-genai>=1.29.0",
     "httpx>=0.25.0",
-    "langchain>=0.3.27",
-    "langchain-google-genai>=2.1.9",
-    "langchain-google-vertexai>=1.0.0",
-    "langgraph>=0.6.4",
-    "langgraph-checkpoint-postgres>=2.0.0",
-    "langgraph-prebuilt>=0.6.4",
-    "langgraph-sdk>=0.2.9",
+    "langchain>=0.3.27,<0.4",
+    "langchain-google-genai>=2.1.9,<3",
+    "langgraph>=0.6.4,<0.7",
+    "langgraph-checkpoint-postgres>=2.0.0,<3",
+    "langgraph-prebuilt>=0.6.4,<0.7",
+    "langgraph-sdk>=0.2.9,<0.3",
     "langgraph-supervisor>=0.0.29",
     "orjson>=3.11.3",
-    "pillow>=10.2.0,<11",
-    "playwright>=1.54.0",
     "psutil>=7.0.0",
     "pydantic==2.11.7",
-    "readability>=0.3.2",
-    "readability-lxml>=0.8.4.1",
     "redis>=6.4.0",
     "upstash-redis>=0.15.0",
     "rich>=14.2.0,<15",
@@ -41,3 +35,8 @@ dependencies = [
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["orbit_core*"]
+
+[project.optional-dependencies]
+openai = ["langchain-openai>=0.3,<0.4"]
+anthropic = ["langchain-anthropic>=0.3,<0.4"]
+browser = ["playwright>=1.54.0", "pillow>=10.2.0,<11", "readability>=0.3.2", "readability-lxml>=0.8.4.1", "langchain-google-vertexai>=2,<3"]

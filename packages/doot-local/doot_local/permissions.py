@@ -16,7 +16,7 @@ from langchain.agents.middleware import HumanInTheLoopMiddleware
 from .config import load_settings
 
 MODES = {"ask", "auto", "full"}
-READ_TOOLS = {"runtime_status", "list_workspace", "list_workspace"}
+READ_TOOLS = {"runtime_status", "list_workspace", "view_image"}
 WRITE_TOOLS = {"apply_patch"}
 
 

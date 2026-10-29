@@ -1,0 +1,7 @@
+id,category,priority,summary
+T-101,billing,high,Charged twice after retry
+T-102,onboarding,medium,Welcome link expired
+T-103,billing,high,Refund still pending
+T-104,access,low,Change display name
+T-105,billing,medium,Need invoice download
+T-106,onboarding,high,Cannot complete account setup

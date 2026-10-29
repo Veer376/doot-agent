@@ -10,7 +10,7 @@ import sys
 import os
 from pathlib import Path
 from .routes.runs import runs_router
-from .routes.threads import threads_router
+from .release_threads import router as threads_router
 from .routes.assistants import assistants_router
 from orbit_core.utils.logging_config import setup_logging
 from contextlib import asynccontextmanager
@@ -57,7 +57,7 @@ async def lifespan(app: FastAPI):
 
     # Then load graphs (which depend on checkpointer being initialized)
     try:
-        load_graphs_from_file(root=PROJECT_ROOT)
+        load_graphs_from_file(config_path=os.getenv("DOOT_GRAPH_CONFIG", "langgraph.showcase.json"), root=PROJECT_ROOT)
         logger.info("Graph registry warmed with graph(s)")
     except GraphRegistryError as exc:
         logger.error("Failed to initialise graph registry: %s", exc)
@@ -85,7 +85,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins
+    allow_origins=[os.getenv("DOOT_WEB_ORIGIN", "http://127.0.0.1:3000")],  # Allows all origins
     allow_credentials=True,
     allow_methods=["*"],  # Allows all methods
     allow_headers=["*"],  # Allows all headers
@@ -125,9 +125,24 @@ app.include_router(runs_router)
 if __name__ == "__main__":
     uvicorn.run(
         "agent_platform.api.main:app",
-        host="0.0.0.0",
+        host="127.0.0.1",
         port=5000,
         reload=False if sys.platform == "win32" else True,
         reload_delay=5,
         loop="asyncio",  # Use asyncio loop instead of uvloop for Windows subprocess support
     )
+
+@app.get("/models")
+async def models():
+    model = os.getenv("DOOT_MODEL", "google_genai:gemini-2.5-flash")
+    provider = model.split(":", 1)[0]
+    return {"models": [{"id": model, "name": model.split(":",1)[-1], "provider": "google" if provider=="google_genai" else provider, "source": "backend"}]}
+
+@app.post("/diagnostics/events", status_code=204)
+async def diagnostic_event():
+    # The local graph diagnostics are not part of this profile.
+    return None
+
+@app.get("/diagnostics")
+async def diagnostics():
+    return {"events": [], "enabled": False}

@@ -12,6 +12,13 @@ _client: AsyncClient | None = None
 
 async def _build_client() -> AsyncClient:
     
+    if os.getenv("DOOT_LOCAL_MODE") == "true":
+        from postgrest import AsyncPostgrestClient
+        from urllib.parse import urlparse
+        url = os.environ["POSTGREST_URL"]
+        if urlparse(url).hostname not in {"127.0.0.1", "localhost", "::1", "postgrest"}:
+            raise ValueError("Local profile requires a local PostgREST service")
+        return AsyncPostgrestClient(url)
     supabase_url = os.getenv("SUPABASE_URL")
     supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
 
@@ -38,7 +45,9 @@ async def close_supabase():
     global _client
     if _client is not None:
         try:
-            if hasattr(_client, "close"):
+            if hasattr(_client, "aclose"):
+                await _client.aclose()
+            elif hasattr(_client, "close"):
                 await _client.close()
         except Exception as e:
             logger.error(f"Error closing Supabase connection: {e}")

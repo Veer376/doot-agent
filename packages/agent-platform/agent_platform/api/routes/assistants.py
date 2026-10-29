@@ -41,7 +41,7 @@ async def search_assistants(
 @assistants_router.get("/{assistant_id}")
 async def get_assistant(
     assistant_id: str = Path(..., description="The ID of the assistant"),
-    user_id: str = Depends(authenticate_user),
+    user_id: Optional[str] = Depends(get_user_optional),
 ):
     """Get an assistant by ID."""
     try:
@@ -68,7 +68,7 @@ async def get_assistant(
 @assistants_router.get("/{assistant_id}/schemas")
 async def get_assistant_schemas(
     assistant_id: str = Path(..., description="The ID of the assistant"),
-    user_id: str = Depends(authenticate_user),
+    user_id: Optional[str] = Depends(get_user_optional),
 ):
     """Get the input/output/state/config schemas for an assistant."""
     try:

@@ -1,0 +1,19 @@
+[project]
+name = "doot-workspace"
+version = "0.1.0"
+requires-python = ">=3.13,<3.14"
+dependencies = ["orbit-core", "orbit-api"]
+
+[dependency-groups]
+dev = ["pytest>=8,<9", "pytest-asyncio>=0.25,<1", "httpx>=0.28,<1"]
+
+[tool.uv.workspace]
+members = ["packages/orbit-core", "packages/agent-platform"]
+
+[tool.uv.sources]
+orbit-core = { workspace = true }
+orbit-api = { workspace = true }
+
+[tool.pytest.ini_options]
+testpaths = ["tests/release"]
+asyncio_mode = "auto"

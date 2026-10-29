@@ -1,0 +1,11 @@
+{
+  "dependencies": [
+    "./packages/doot-local"
+  ],
+  "graphs": {
+    "doot": "./packages/doot-local/doot_local/aegra_graph.py:graph"
+  },
+  "http": {
+    "app": "doot_local.aegra_app:app"
+  }
+}

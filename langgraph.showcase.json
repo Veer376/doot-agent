@@ -1,0 +1,5 @@
+{
+  "graphs": {
+    "chat_agent": "packages/orbit-core/orbit_core/agents/showcase_agent.py:graph"
+  }
+}

@@ -18,7 +18,7 @@ from mcp.client.streamable_http import streamablehttp_client
 from .tools import _resolve_workspace_path, request_user_input
 from .workspaces import selected_workspace
 
-MCP_TOOLS = {"execute_command", "apply_patch", "workspace", "manage_task", "write_todos"}
+MCP_TOOLS = {"execute_command", "apply_patch", "workspace", "manage_task", "write_todos", "view_image"}
 
 
 def connection_settings():
@@ -48,6 +48,8 @@ def effective_arguments(name, args, runtime):
                     if path != "/dev/null":
                         path = path[2:] if path.startswith(("a/", "b/")) else path
                         _resolve_workspace_path(str(Path(args["cwd"]) / path), runtime)
+    elif name == "view_image":
+        args["paths"] = [str(_resolve_workspace_path(path, runtime)) for path in args.get("paths", [])]
     elif name == "workspace" and args.get("action") == "open":
         root = selected_workspace(runtime.context or {})
         requested = _resolve_workspace_path(args.get("path") or str(root), runtime)
@@ -76,6 +78,10 @@ async def invoke_mcp(name, args, runtime):
                 if opened.isError:
                     raise RuntimeError("Local System rejected the selected workspace: " + " ".join(getattr(c, "text", "") for c in opened.content))
             result = await session.call_tool(name, arguments)
+    return result_message(name, result, runtime.tool_call_id)
+
+
+def result_message(name, result, tool_call_id):
     data = result.structuredContent
     if data is None:
         for block in result.content:
@@ -88,7 +94,17 @@ async def invoke_mcp(name, args, runtime):
                 break
     payload = {"content": [c.model_dump(mode="json") for c in result.content if c.type == "text"],
                "structuredContent": data, "isError": bool(result.isError)}
-    return ToolMessage(content=json.dumps(payload), name=name, tool_call_id=runtime.tool_call_id,
+    content = json.dumps(payload)
+    if any(block.type == "image" for block in result.content):
+        content = []
+        for block in result.content:
+            if block.type == "text":
+                content.append({"type": "text", "text": block.text})
+            elif block.type == "image":
+                content.append({"type": "image_url", "image_url": {"url": f"data:{block.mimeType};base64,{block.data}"}})
+        if data is not None:
+            content.append({"type": "text", "text": json.dumps(data)})
+    return ToolMessage(content=content, name=name, tool_call_id=tool_call_id,
                        status="error" if result.isError else "success")
 
 
@@ -112,5 +128,5 @@ async def load_tools():
     if MCP_TOOLS - found.keys():
         raise RuntimeError("Local System is missing tools: " + ", ".join(sorted(MCP_TOOLS - found.keys())))
     # Human input stays native to Doot's interrupt UI rather than opening the
-    # bridge's separate questionnaire UI. It is still one of the six tools.
+    # bridge's separate questionnaire UI. It is still a native agent tool.
     return await asyncio.to_thread(lambda: [bridge_tool(found[name]) for name in sorted(found)] + [request_user_input])

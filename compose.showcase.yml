@@ -1,0 +1,54 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: dootdev
+      POSTGRES_PASSWORD: local-demo-only
+      POSTGRES_DB: doot
+    volumes:
+      - doot-data:/var/lib/postgresql/data
+      - ./deployments/local/00-auth.sql:/docker-entrypoint-initdb.d/00-auth.sql:ro
+      - ./supabase/migrations/20250924151716_init_core_schema.sql:/docker-entrypoint-initdb.d/10-schema.sql:ro
+      - ./deployments/local/99-grants.sql:/docker-entrypoint-initdb.d/99-grants.sql:ro
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U dootdev -d doot"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+  redis:
+    image: redis:7-alpine
+    command: [redis-server, --appendonly, 'yes']
+    volumes: [doot-events:/data]
+  postgrest:
+    image: postgrest/postgrest:v16.5
+    environment:
+      PGRST_DB_URI: postgres://dootdev:local-demo-only@postgres:5432/doot
+      PGRST_DB_ANON_ROLE: doot_local
+    depends_on:
+      postgres:
+        condition: service_healthy
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.showcase
+    ports: ['127.0.0.1:5000:5000']
+    environment:
+      DOOT_LOCAL_MODE: 'true'
+      POSTGREST_URL: http://postgrest:3000
+      POSTGRES_URL: postgresql://dootdev:local-demo-only@postgres:5432/doot
+      REDIS_URL: redis://redis:6379/0
+      DOOT_MODEL: ${DOOT_MODEL:-google_genai:gemini-2.5-flash}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    volumes: [./.doot/reports:/app/.doot/reports]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      postgrest:
+        condition: service_started
+      redis:
+        condition: service_started
+volumes:
+  doot-data:
+  doot-events:
