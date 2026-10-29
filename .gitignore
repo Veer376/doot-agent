@@ -35,7 +35,7 @@ build
 .playwright-cli/
 .DS_Store
 *.tsbuildinfo
-release/
+/release/
 
 .doot/
 .venv/
