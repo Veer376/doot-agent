@@ -9,7 +9,7 @@
 
 The five deterministic tests cover fixture counts, graph approval/resume, rejection without a write, explicit local-session auth, and missing hosted auth rejection. The graph tests use a scripted model and in-memory checkpoints; they are not model-quality or PostgreSQL write benchmarks.
 
-The web repository has its own [TypeScript and production-build workflow](https://github.com/Veer376/doot-agent-web/actions/workflows/release-checks.yml). The previous release build passed, and the canonical-link update passed the local TypeScript check. Historical lint debt remains separate from those gates.
+The web repository has its own [TypeScript and production-build workflow](https://github.com/Veer376/doot-agent-web/actions/workflows/release-checks.yml). [Web run 40872352702](https://github.com/Veer376/doot-agent-web/actions/runs/40872352702) passed TypeScript checking and the production build for canonical-link revision `95aedc3`; the local TypeScript check also passed. Historical lint debt remains separate from those gates.
 
 Reproduce the backend checks:
 
