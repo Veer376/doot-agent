@@ -18,7 +18,7 @@ The supported entrypoint is `agent_platform.api.main:app` with `langgraph.showca
 | Assistant/thread rows and metadata | PostgreSQL via PostgREST | Persist in the local database volume |
 | Graph checkpoints | LangGraph PostgreSQL saver | Persist independently of the API process |
 | Run status/metadata | Redis | 24-hour retention |
-| Run events | Redis Streams | Up to 5,000 events per run, with the retention window |
+| Run events | Redis Streams | Approximately 5,000 events per run (Redis approximate trimming), with the retention window |
 | Active execution | Background task inside the FastAPI process | Ends on API-process exit |
 | Approved report | `.doot/reports` host bind mount | Remains until explicitly removed |
 

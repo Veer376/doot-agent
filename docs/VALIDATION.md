@@ -1,13 +1,45 @@
-# Release validation — 29 October 2026
+# Verification record — 29 October 2026
 
-Verified locally on macOS with Python 3.13.12, Node.js 22, PostgreSQL 18, Redis 7 and PostgREST 16.5. The supported Compose profile pins PostgreSQL 16; Docker is not installed on this machine, so an actual Compose build/run remains unverified.
+## Automated checks
 
-- Five deterministic tests pass: fixture counts, approval/resume, rejection without a write, explicit local-session auth, missing hosted auth rejection.
-- Web TypeScript check and production build passed. Next build performs the TypeScript check separately; historical lint debt remains and lint is not a claimed passing gate.
-- Live Gemini tool calls inspected six synthetic tickets, produced exact category/priority counts, paused at a persisted approval interrupt, and wrote a 511-byte Markdown report only after approval.
-- Browser verification exercised the compiled web UI against the custom backend, approved the write, then reloaded the page and observed the restored conversation and saved-report confirmation.
-- Original browser automation demo retained at the user's request. It is a historical workflow, separate from the new synthetic-data verification example.
+[Backend CI run 40872504461](https://github.com/Veer376/doot-agent/actions/runs/40872504461) passed at revision `5432839` with two jobs:
 
-The live check uses the user's existing provider key privately; keys and real database credentials are not in the release tree. Source/history secret audits and publishing state are recorded in the private release checkpoint outside both repositories.
+- **Backend:** frozen uv installation on Python 3.13; five deterministic release tests; all 65 repository-relative links across ten documents; Compose configuration parsing.
+- **Compose integration:** built the actual API image and started the documented PostgreSQL 16, Redis 7, PostgREST 16.5, and FastAPI stack on Ubuntu. The smoke check read assistant schemas, created and patched a thread through PostgREST, read PostgreSQL-backed graph state/history, and listed runs through Redis. After restarting the API it retrieved the same thread and persisted metadata. No provider key or model calls were used. The job removed its volumes afterward.
 
-Limitations: no production concurrency benchmark, queue durability claim, browser-agent regression suite or multi-user deployment verification. The original FastAPI implementation mixed local and private runtime APIs; the release mounts only the supported endpoints described in ARCHITECTURE.md. Historical modules remain available as source with their upstream license notices.
+The five deterministic tests cover fixture counts, graph approval/resume, rejection without a write, explicit local-session auth, and missing hosted auth rejection. The graph tests use a scripted model and in-memory checkpoints; they are not model-quality or PostgreSQL write benchmarks.
+
+The web repository has its own [TypeScript and production-build workflow](https://github.com/Veer376/doot-agent-web/actions/workflows/release-checks.yml). The previous release build passed, and the canonical-link update passed the local TypeScript check. Historical lint debt remains separate from those gates.
+
+Reproduce the backend checks:
+
+```sh
+uv sync --frozen
+uv run pytest
+python3 scripts/check_docs.py
+docker compose -f compose.showcase.yml up --build -d --wait
+python3 scripts/smoke_api.py --thread-file /tmp/doot-smoke-thread
+docker compose -f compose.showcase.yml restart api
+python3 scripts/smoke_api.py --thread-file /tmp/doot-smoke-thread --verify-existing
+docker compose -f compose.showcase.yml down
+```
+
+The smoke check creates one labeled thread. It checks service integration and metadata persistence; approval behavior is checked separately below and in the deterministic graph tests.
+
+## Recorded live validation
+
+The release preparation previously ran the compiled web UI and backend natively on macOS with Python 3.13.12, Node.js 22, PostgreSQL 18, Redis 7 and PostgREST 16.5.
+
+- A live Gemini run inspected six synthetic support tickets, produced the exact category/priority counts, and paused at a PostgreSQL-backed approval interrupt.
+- After approval it wrote a 511-byte Markdown report. The UI was reloaded and restored the conversation and saved-report confirmation.
+- [Approval/resume recording](assets/demos/approval-resume.mp4): two captures of the same real thread are joined, with the pause omitted. The data is synthetic; model/tool execution was live.
+
+## Demo and documentation inspection
+
+Both original lab recordings, the icon, architecture sketch and Gemini experiment images were copied into the canonical repository and checked against their original bytes. The additional browser recording and approval/resume clip are also here. [Provenance](PROVENANCE.md) records their origins.
+
+The published GitHub README was opened in an isolated browser: both original video attachments render as players, the local images load, and the expected heading structure is present. The website responded successfully and its public interface was captured for the linked preview. Website reachability is separate from hosted-agent availability.
+
+## Remaining boundaries
+
+There is no published production-concurrency benchmark, durable queue guarantee, browser-agent regression score, or validated multi-user hosted deployment. The older browser entrypoint needs adapter/import repair and a controlled browser fixture before it belongs in the supported quickstart; see [browser design](BROWSER_DESIGN.md). Historical lab proposals are not treated as implemented features.

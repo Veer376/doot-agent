@@ -116,7 +116,7 @@ flowchart LR
   REST --> PG
 ```
 
-The worker runs in the API process. Checkpoints persist independently, while event/run metadata has a 24-hour retention window and each stream retains up to 5,000 events. API restarts do not automatically restart unfinished runs. [Architecture](docs/ARCHITECTURE.md) walks through an approval and lists the supported API.
+The worker runs in the API process. Checkpoints persist independently, while event/run metadata has a 24-hour retention window and each stream targets approximately 5,000 events. API restarts do not automatically restart unfinished runs. [Architecture](docs/ARCHITECTURE.md) walks through an approval and lists the supported API.
 
 ## Website and project map
 
