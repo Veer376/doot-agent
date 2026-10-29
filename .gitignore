@@ -8,7 +8,6 @@ screenshots
 process_dom_test.py
 dom_tests.py
 dom.json
-/tests
 .venv/
 .doot/
 .pytest_cache/
