@@ -48,7 +48,7 @@ A message_registry has been implemented to track all active messages across diff
 message_registry.register(
     message="""You have had multiple failures...""",
     is_active=lambda ctx: len(ctx.consecutive_failures) >= ctx.max_consecutive_failures,
-) 
+)
 ```
 ⚠️ Gemini Ghosting and [hallucinations](../assets/gemini_hallucinations/) are common issues in LLMs. Issues such as ToolCallMissing() or InvalidToolCall() are handled gracefully through LLM escalation, ensuring smooth recovery. A custom `MessageException(Exception):` provides a clean, consistent framework for managing these error cases.
 ```python
