@@ -1,3 +1,5 @@
+> **Historical deployment notes.** This cloud setup is not the supported release profile. Start with [local development](DEVELOPMENT.md).
+
 # Google Cloud Platform Setup - Command Reference
 
 This document tracks all commands executed during the GCP setup for Orbit Agent deployment.
@@ -312,7 +314,7 @@ Phase 1 (GCP Setup) is complete! ✅
 2. Create GitHub Actions workflows
 3. Deploy to Cloud Run
 
-See [setup_github.md](./setup_github.md) for next steps.
+The former `setup_github.md` guide is no longer present. This cloud path is historical; use [the supported local setup](DEVELOPMENT.md).
 
 ---
 

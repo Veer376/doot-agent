@@ -10,4 +10,24 @@ jobs:
           python-version: '3.13'
       - run: uv sync --frozen
       - run: uv run pytest
+      - run: python3 scripts/check_docs.py
       - run: docker compose -f compose.showcase.yml config --quiet
+  compose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and start the documented stack
+        run: docker compose -f compose.showcase.yml up --build -d --wait --wait-timeout 120
+      - name: Check API, database and Redis integration without a provider key
+        run: python3 scripts/smoke_api.py --thread-file /tmp/doot-smoke-thread
+      - name: Restart the API and verify persisted thread metadata
+        run: |
+          docker compose -f compose.showcase.yml restart api
+          python3 scripts/smoke_api.py --thread-file /tmp/doot-smoke-thread --verify-existing
+      - name: Show logs on failure
+        if: failure()
+        run: docker compose -f compose.showcase.yml logs --no-color --tail 150
+      - name: Clean up test stack
+        if: always()
+        run: docker compose -f compose.showcase.yml down -v

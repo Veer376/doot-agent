@@ -1,0 +1,22 @@
+name: Reproducible bug
+description: A problem in setup, the supported runtime, or a documented experiment.
+title: "bug: "
+body:
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Include revision, OS, runtime versions, profile, and the smallest steps. Remove keys and personal data.
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and observed behavior
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Relevant logs or screenshots
+      description: State whether a model call was live or mocked. Do not attach credentials or private sessions.

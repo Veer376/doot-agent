@@ -41,6 +41,12 @@ services:
       GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/', timeout=2)"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
     volumes: [./.doot/reports:/app/.doot/reports]
     depends_on:
       postgres:

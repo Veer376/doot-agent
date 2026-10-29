@@ -1,0 +1,17 @@
+name: Engineering proposal
+description: Propose a bounded runtime, agent, or developer-experience change.
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem and evidence
+      description: What task is blocked, and where does the current behavior originate?
+    validations:
+      required: true
+  - type: textarea
+    id: change
+    attributes:
+      label: Smallest useful change
+      description: Include the affected source path, tradeoffs, and how success would be verified.
+    validations:
+      required: true
